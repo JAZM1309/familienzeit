@@ -19,5 +19,6 @@
 .calendar-legend{display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--muted);font-size:11px;margin:10px 0 24px}
 .calendar-legend i{display:inline-block;width:7px;height:7px;border-radius:50%;background:#d58b62;margin-right:4px}
 .subsection-title{font-size:16px;margin:18px 0 8px}
-@media(min-width:900px){.bottom-nav{left:50%;right:auto;transform:translateX(-50%);width:min(680px,calc(100% - 40px));border:1px solid var(--line);border-bottom:0;border-radius:18px 18px 0 0}}
+/* Mobile-first: Die Navigation bleibt über die gesamte Bildschirmbreite am unteren Rand. */
+.bottom-nav{left:0;right:0;width:100%;transform:none;border-left:0;border-right:0;border-radius:0}
 @media(max-width:420px){.bottom-nav-item{font-size:9px}.calendar-day{min-height:41px}.calendar-grid{gap:3px}}
