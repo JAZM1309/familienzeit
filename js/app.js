@@ -167,6 +167,10 @@ if ('serviceWorker' in navigator) {
     try {
       const reg = await navigator.serviceWorker.register('sw.js');
       if (!reg) return;
+      // Regelmäßig und beim Zurückkehren in die App nach Updates suchen
+      const check = () => reg.update().catch(() => {});
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
+      setInterval(check, 30 * 60 * 1000);
       const offer = (w) => toast('Neue Version verfügbar.', {
         action: 'Neu laden', duration: 0,
         onAction: () => w.postMessage('SKIP_WAITING'),
