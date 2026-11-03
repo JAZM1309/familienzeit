@@ -1,10 +1,13 @@
 import { h, icon, avatar, sheet, toast } from '../dom.js';
 import * as api from '../api.js';
 import { state, urlFor, go, render } from '../app.js';
+import { startOfDay, addDays, toDateInput } from '../dates.js';
+import { expandAll } from '../recur.js';
+import { agendaItem } from '../events.js';
 
 // Bereiche der Startseite. "version" = ab wann der Bereich Inhalte zeigt.
 const SECTIONS = {
-  termine:  { title: 'Heutige Termine',       icon: 'calendar', version: '1.1' },
+  termine:  { title: 'Heutige Termine',       icon: 'calendar', version: null },
   aufgaben: { title: 'Anstehende Aufgaben',   icon: 'tasks',    version: '1.3' },
   einkauf:  { title: 'Offene Einkaufsartikel', icon: 'cart',    version: '1.5' },
   essen:    { title: 'Neue Essenswünsche',    icon: 'meal',     version: '1.4' },
@@ -29,9 +32,20 @@ function layout() {
   return { order, hidden };
 }
 
+let today = [];
+
 function sectionCard(key) {
   const s = SECTIONS[key];
   const head = h('div', { class: 'card-head' }, h('div', { class: 'card-icon' }, icon(s.icon, 19)), h('h2', null, s.title));
+
+  if (key === 'termine') {
+    head.append(h('button', { class: 'link-btn', onClick: () => go('/kalender') }, 'Kalender'));
+    return h('section', { class: 'card' }, head,
+      today.length
+        ? h('div', { class: 'ev-list' }, today.slice(0, 6).map((o) => agendaItem(o, render)),
+          today.length > 6 ? h('button', { class: 'link-btn', onClick: () => go('/kalender?v=day') }, `+ ${today.length - 6} weitere`) : null)
+        : h('div', { class: 'soon' }, icon('check', 16), 'Heute stehen keine Termine an.'));
+  }
 
   if (key === 'familie') {
     const people = state.members.map((m) => h('button', {
@@ -79,13 +93,14 @@ function installHint() {
 }
 
 function quickAdd() {
-  sheet('Schnelleingabe', () => {
+  sheet('Schnelleingabe', (close) => {
     const item = (ic, label, version) => h('button', { disabled: true },
       h('span', { class: 'card-icon' }, icon(ic, 19)),
       h('strong', null, label),
       h('span', { class: 'muted small' }, `ab Version ${version}`));
     return h('div', { class: 'quick-grid' },
-      item('calendar', 'Termin', '1.1'),
+      h('button', { onClick: () => { close(); go(`/termin?datum=${toDateInput(new Date())}`); } },
+        h('span', { class: 'card-icon' }, icon('calendar', 19)), h('strong', null, 'Termin'), h('span', { class: 'muted small' }, 'Neuer Kalendereintrag')),
       item('tasks', 'Aufgabe', '1.3'),
       item('meal', 'Essenswunsch', '1.4'),
       item('cart', 'Einkauf', '1.5'));
@@ -140,6 +155,14 @@ export async function homeView() {
   const date = now.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const { order, hidden } = layout();
   const visible = order.filter((k) => !hidden.has(k));
+
+  today = [];
+  if (visible.includes('termine')) {
+    const from = startOfDay(now);
+    const to = addDays(from, 1);
+    try { today = expandAll(await api.eventsInRange(from, to), from, to); }
+    catch (e) { toast(api.germanError(e), { type: 'error' }); }
+  }
 
   return h('div', null,
     h('div', { class: 'hello' },
