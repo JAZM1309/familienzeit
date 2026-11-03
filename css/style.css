@@ -372,3 +372,18 @@ main { overflow-x: clip; }
 .progress[hidden] { display: none; }
 .progress span { display: block; height: 100%; width: 0; background: var(--teal); transition: width .2s; }
 .btn.disabled { opacity: .5; pointer-events: none; }
+
+/* =================== Version 1.2: Benachrichtigungen =================== */
+.nf-list { display: flex; flex-direction: column; }
+.nf-item { display: flex; align-items: flex-start; gap: 12px; width: 100%; text-align: left; border: 0; background: none; cursor: pointer;
+  padding: 12px 4px; border-bottom: 1px solid var(--line); color: var(--text); border-radius: 0; }
+.nf-item:last-child { border-bottom: 0; }
+.nf-item:hover { background: var(--sky); }
+.nf-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.nf-title { font-weight: 500; }
+.nf-item.unread .nf-title { font-weight: 700; }
+.nf-body { font-size: .86rem; color: var(--muted); }
+.nf-time { font-size: .76rem; color: var(--muted); }
+.nf-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--orange); flex: none; margin-top: 6px; }
+.badge-dot[hidden] { display: none; }
+.iconbtn[aria-current="page"] { background: var(--sky); }

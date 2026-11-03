@@ -4,6 +4,7 @@ import { state, urlFor, go, render } from '../app.js';
 import { startOfDay, addDays, toDateInput } from '../dates.js';
 import { expandAll } from '../recur.js';
 import { agendaItem } from '../events.js';
+import { notificationRow, openNotification } from './notifications.js';
 
 // Bereiche der Startseite. "version" = ab wann der Bereich Inhalte zeigt.
 const SECTIONS = {
@@ -12,7 +13,7 @@ const SECTIONS = {
   einkauf:  { title: 'Offene Einkaufsartikel', icon: 'cart',    version: '1.5' },
   essen:    { title: 'Neue Essenswünsche',    icon: 'meal',     version: '1.4' },
   familie:  { title: 'Familienübersicht',     icon: 'users',    version: null },
-  meldungen:{ title: 'Benachrichtigungen',    icon: 'bell',     version: '1.2' },
+  meldungen:{ title: 'Benachrichtigungen',    icon: 'bell',     version: null },
 };
 const DEFAULT_ORDER = ['termine', 'aufgaben', 'einkauf', 'essen', 'familie', 'meldungen'];
 
@@ -33,6 +34,7 @@ function layout() {
 }
 
 let today = [];
+let latest = [];
 
 function sectionCard(key) {
   const s = SECTIONS[key];
@@ -45,6 +47,14 @@ function sectionCard(key) {
         ? h('div', { class: 'ev-list' }, today.slice(0, 6).map((o) => agendaItem(o, render)),
           today.length > 6 ? h('button', { class: 'link-btn', onClick: () => go('/kalender?v=day') }, `+ ${today.length - 6} weitere`) : null)
         : h('div', { class: 'soon' }, icon('check', 16), 'Heute stehen keine Termine an.'));
+  }
+
+  if (key === 'meldungen') {
+    head.append(h('button', { class: 'link-btn', onClick: () => go('/meldungen') }, 'Alle'));
+    return h('section', { class: 'card' }, head,
+      latest.length
+        ? h('div', { class: 'nf-list' }, latest.map((n) => notificationRow(n, openNotification)))
+        : h('div', { class: 'soon' }, icon('check', 16), 'Keine neuen Benachrichtigungen.'));
   }
 
   if (key === 'familie') {
@@ -157,6 +167,10 @@ export async function homeView() {
   const visible = order.filter((k) => !hidden.has(k));
 
   today = [];
+  latest = [];
+  if (visible.includes('meldungen')) {
+    try { latest = (await api.listNotifications(10)).filter((n) => !n.read_at).slice(0, 3); } catch { /* egal */ }
+  }
   if (visible.includes('termine')) {
     const from = startOfDay(now);
     const to = addDays(from, 1);

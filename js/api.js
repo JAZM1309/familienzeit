@@ -170,3 +170,49 @@ export async function eventHistory(id) {
 export async function clearExceptions(eventId) {
   return check(await sb.from('event_exceptions').delete().eq('event_id', eventId));
 }
+
+// ---------- Benachrichtigungen (ab Version 1.2) ----------
+export async function pushPublicKey() {
+  return check(await sb.rpc('push_public_key'));
+}
+
+export async function registerPush(sub, label) {
+  const j = sub.toJSON();
+  return check(await sb.rpc('register_push', {
+    p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth, p_label: label,
+  }));
+}
+
+export async function unregisterPush(endpoint) {
+  return check(await sb.rpc('unregister_push', { p_endpoint: endpoint }));
+}
+
+export async function sendTestPush() {
+  return check(await sb.rpc('send_test_push'));
+}
+
+export async function listNotifications(limit = 100) {
+  return check(await sb.from('notifications')
+    .select('id, type, title, body, url, created_at, read_at')
+    .order('created_at', { ascending: false })
+    .limit(limit));
+}
+
+export async function unreadCount() {
+  const { count, error } = await sb.from('notifications').select('id', { count: 'exact', head: true }).is('read_at', null);
+  if (error) throw error;
+  return count || 0;
+}
+
+export async function markRead(ids) {
+  if (!ids.length) return;
+  return check(await sb.from('notifications').update({ read_at: new Date().toISOString() }).in('id', ids));
+}
+
+export async function markAllRead() {
+  return check(await sb.from('notifications').update({ read_at: new Date().toISOString() }).is('read_at', null));
+}
+
+export async function deleteReadNotifications() {
+  return check(await sb.from('notifications').delete().not('read_at', 'is', null));
+}

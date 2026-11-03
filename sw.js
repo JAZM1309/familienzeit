@@ -1,6 +1,6 @@
 // Familienzeit Service Worker
 // Bei jeder neuen Version VERSION erhöhen, damit Geräte das Update laden.
-const VERSION = '1.1.2';
+const VERSION = '1.2.0';
 const CACHE = 'familienzeit-' + VERSION;
 const SHELL = [
   './',
@@ -22,6 +22,9 @@ const SHELL = [
   'js/events.js',
   'js/updater.js',
   'js/unzip.js',
+  'js/push.js',
+  'js/views/notifications.js',
+  'icons/badge-96.png',
   'icons/icon-192.png',
   'icons/icon-512.png',
   'icons/apple-touch-icon.png',
@@ -58,4 +61,40 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   event.respondWith(caches.match(req).then((hit) => hit || fetch(req)));
+});
+
+// ---------- Push-Benachrichtigungen ----------
+self.addEventListener('push', (event) => {
+  let d = {};
+  try { d = event.data ? event.data.json() : {}; } catch { d = { title: 'Familienzeit', body: event.data?.text() || '' }; }
+  event.waitUntil((async () => {
+    await self.registration.showNotification(d.title || 'Familienzeit', {
+      body: d.body || '',
+      icon: 'icons/icon-192.png',
+      badge: 'icons/badge-96.png',
+      tag: 'fz-' + (d.id || Date.now()),
+      lang: 'de',
+      data: { url: d.url || '#/meldungen', id: d.id || null },
+    });
+    if (typeof d.unread === 'number' && self.navigator.setAppBadge) {
+      try { await self.navigator.setAppBadge(d.unread); } catch { /* egal */ }
+    }
+    for (const c of await self.clients.matchAll({ type: 'window', includeUncontrolled: true })) c.postMessage({ type: 'push' });
+  })());
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const { url = '#/meldungen', id = null } = event.notification.data || {};
+  event.waitUntil((async () => {
+    for (const c of await self.clients.matchAll({ type: 'window', includeUncontrolled: true })) {
+      if (c.url.startsWith(self.registration.scope)) {
+        await c.focus();
+        c.postMessage({ type: 'open', url, id });
+        return;
+      }
+    }
+    const sep = url.includes('?') ? '&' : '?';
+    await self.clients.openWindow(self.registration.scope + url + (id ? `${sep}n=${id}` : ''));
+  })());
 });

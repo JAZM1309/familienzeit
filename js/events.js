@@ -156,7 +156,7 @@ export function openEvent(occ, onChange) {
       row(ev.visibility === 'private' ? 'lock' : 'shield', VISIBILITY[ev.visibility].label,
         h('div', { class: 'muted small' }, VISIBILITY[ev.visibility].hint)),
       row('bell', mine.length ? mine.map(reminderText).join(', ') : 'Keine Erinnerung',
-        h('div', { class: 'muted small' }, 'Deine Erinnerung · Benachrichtigungen kommen mit Version 1.2')),
+        h('div', { class: 'muted small' }, 'Deine persönliche Erinnerung')),
       occ.description ? row('text', h('div', { class: 'pre' }, occ.description)) : null,
       h('div', { class: 'meta' },
         `Erstellt von ${byName(ev.owner_id)} · ${fmtDateTime(created)}`,

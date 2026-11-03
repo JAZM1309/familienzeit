@@ -210,7 +210,7 @@ export async function eventEditView({ params }) {
         })),
         h('button', { type: 'button', class: 'fchip', onClick: () => { custom.hidden = !custom.hidden; } }, 'Eigene …')),
       custom,
-      h('div', { class: 'hint' }, 'Gilt nur für dich. Benachrichtigungen werden ab Version 1.2 verschickt.'));
+      h('div', { class: 'hint' }, 'Gilt nur für dich und kommt als Push-Nachricht, wenn Benachrichtigungen eingeschaltet sind.'));
   };
 
   drawVis(); drawPeople(); drawRepeat(); drawRem();

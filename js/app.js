@@ -6,6 +6,8 @@ import { familyView } from './views/family.js';
 import { profileView } from './views/profile.js';
 import { calendarView } from './views/calendar.js';
 import { eventEditView } from './views/event-edit.js';
+import { notificationsView } from './views/notifications.js';
+import { forgetDevice, refreshPush } from './push.js';
 
 const root = document.getElementById('app');
 
@@ -15,6 +17,7 @@ export const state = {
   family: null,
   members: [],
   urls: {},          // avatar_path → signierte URL
+  unread: 0,
 };
 
 // ---------- Darstellung (Thema, Schriftgröße) ----------
@@ -40,6 +43,19 @@ export async function loadData() {
   const paths = members.map((m) => m.avatar_path).filter(Boolean);
   try { state.urls = await api.signedUrls(paths); } catch { state.urls = {}; }
   if (state.me) applyUi(state.me.settings);
+  await refreshUnread();
+}
+
+// Zahl ungelesener Meldungen (Glocke, App-Symbol)
+export async function refreshUnread() {
+  if (!state.session) return;
+  try { state.unread = await api.unreadCount(); } catch { return; }
+  const dot = document.getElementById('bell-dot');
+  if (dot) dot.hidden = state.unread === 0;
+  try {
+    if (state.unread && navigator.setAppBadge) navigator.setAppBadge(state.unread);
+    else if (navigator.clearAppBadge) navigator.clearAppBadge();
+  } catch { /* egal */ }
 }
 
 export function urlFor(member) {
@@ -54,6 +70,7 @@ export function isAdmin() {
 const PUBLIC = { '/anmelden': loginView, '/gruenden': foundView, '/einladung': inviteView };
 const PRIVATE = {
   '/': homeView, '/kalender': calendarView, '/termin': eventEditView, '/familie': familyView, '/profil': profileView,
+  '/meldungen': notificationsView,
 };
 const NAV_OF = { '/termin': '/kalender' };
 
@@ -93,6 +110,7 @@ export async function render() {
     return;
   }
 
+  if (params.get('n')) api.markRead([Number(params.get('n'))]).then(refreshUnread).catch(() => {});
   const view = PRIVATE[path] || homeView;
   const content = await view({ params });
   if (seq !== renderSeq) return;
@@ -108,9 +126,9 @@ function shell(path, content) {
   const top = h('header', { class: 'topbar' }, h('div', { class: 'wrap' },
     h('div', { class: 'brand' }, h('img', { src: 'icons/icon-192.png', alt: '' }), 'Familienzeit'),
     h('button', {
-      class: 'iconbtn', 'aria-label': 'Benachrichtigungen',
-      onClick: () => toast('Benachrichtigungen kommen mit Version 1.2.'),
-    }, icon('bell')),
+      class: 'iconbtn', 'aria-label': 'Benachrichtigungen', 'aria-current': path === '/meldungen' ? 'page' : null,
+      onClick: () => go('/meldungen'),
+    }, icon('bell'), h('span', { class: 'badge-dot', id: 'bell-dot', hidden: state.unread === 0 })),
     h('button', { class: 'iconbtn', 'aria-label': 'Mein Profil', onClick: () => go('/profil') },
       avatar(state.me, 32, urlFor(state.me)))));
 
@@ -124,6 +142,7 @@ function shell(path, content) {
 }
 
 export async function logout() {
+  await forgetDevice();
   await api.signOut();
   state.session = null; state.me = null; state.family = null; state.members = []; state.urls = {};
   go('/anmelden');
@@ -133,6 +152,7 @@ export async function logout() {
 export async function afterLogin(session) {
   state.session = session;
   await loadData();
+  refreshPush();
   go('/');
 }
 
@@ -140,7 +160,7 @@ export async function afterLogin(session) {
 async function boot() {
   try {
     state.session = await api.getSession();
-    if (state.session) await loadData();
+    if (state.session) { await loadData(); refreshPush(); }
   } catch (e) {
     console.error(e);
     if (state.session) toast(api.germanError(e), { type: 'error' });
@@ -156,6 +176,15 @@ async function boot() {
   });
 
   window.addEventListener('hashchange', render);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refreshUnread(); });
+  // Nachrichten vom Service Worker: neue Push-Meldung oder Klick auf eine Meldung
+  navigator.serviceWorker?.addEventListener('message', (e) => {
+    if (e.data?.type === 'push') refreshUnread();
+    if (e.data?.type === 'open') {
+      if (e.data.id) api.markRead([e.data.id]).then(refreshUnread).catch(() => {});
+      if (e.data.url) location.hash = e.data.url.replace(/^#/, '');
+    }
+  });
   await render();
 }
 

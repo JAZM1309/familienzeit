@@ -2,6 +2,7 @@ import { h, icon, avatar, sheet, toast, field, passwordInput, busy, confirmDialo
 import * as api from '../api.js';
 import { state, urlFor, render, applyUi, logout, isAdmin } from '../app.js';
 import { updateCard } from '../updater.js';
+import { notificationsCard } from '../push.js';
 import { APP_VERSION } from '../config.js';
 
 const COLORS = ['#27A99A', '#E9A34A', '#5B7FDB', '#C9567A', '#8A63D2', '#3F9C4F', '#D9604C', '#2F8FB8', '#B08A2E', '#6B7A8F'];
@@ -196,6 +197,7 @@ export async function profileView() {
     nameCard(),
     colorCard(),
     displayCard(),
+    notificationsCard(),
     passwordCard(),
     isAdmin() ? updateCard() : null,
     h('p', { class: 'version' }, `Familienzeit ${APP_VERSION}`));
