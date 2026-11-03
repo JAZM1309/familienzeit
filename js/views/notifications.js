@@ -15,6 +15,7 @@ const TYPE = {
   task_done: { icon: 'check', group: 'aufgaben' },
   task_reminder: { icon: 'bell', group: 'aufgaben' },
   comment_new: { icon: 'text', group: null },
+  meal_new: { icon: 'meal', group: 'essen' },
 };
 const groupOf = (n) => (TYPE[n.type] || TYPE.test).group || (n.task_id ? 'aufgaben' : 'termine');
 

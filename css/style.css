@@ -427,3 +427,33 @@ main { overflow-x: clip; }
 .att.add { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer;
   border: 2px dashed var(--line); background: transparent; color: var(--muted); }
 .sheet .section-title { margin: 18px 0 10px; }
+
+/* =================== Version 1.4: Essenswünsche =================== */
+.meal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+.meal-strip { display: grid; grid-auto-flow: column; grid-auto-columns: 150px; gap: 10px; overflow-x: auto; margin: 0 -18px; padding: 0 18px 4px; scrollbar-width: none; }
+.meal-strip::-webkit-scrollbar { display: none; }
+.meal-card { background: var(--card); border-radius: 16px; overflow: hidden; box-shadow: var(--shadow); display: flex; flex-direction: column; }
+.meal-strip .meal-card { box-shadow: none; border: 1px solid var(--line); }
+.meal-card.cooked .meal-img img, .meal-card.cooked .meal-ph { filter: grayscale(.5) opacity(.75); }
+.meal-img { position: relative; display: block; width: 100%; aspect-ratio: 4 / 3; border: 0; padding: 0; cursor: pointer; background: var(--sky); }
+.meal-img img { width: 100%; height: 100%; object-fit: cover; }
+.meal-ph { width: 100%; height: 100%; display: grid; place-items: center; color: var(--c);
+  background: color-mix(in srgb, var(--c) 16%, var(--card)); }
+.meal-badge { position: absolute; left: 8px; top: 8px; display: inline-flex; align-items: center; gap: 4px; font-size: .72rem; font-weight: 700;
+  background: rgba(14, 24, 36, .7); color: #fff; padding: 3px 8px; border-radius: 999px; }
+.meal-body { padding: 10px 10px 8px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.meal-title { text-align: left; background: none; border: 0; padding: 0; font-weight: 700; cursor: pointer; color: var(--text); line-height: 1.25; }
+.meal-foot { display: flex; align-items: center; gap: 4px; margin-top: auto; }
+.meal-foot .grow { flex: 1; }
+.mark { display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; cursor: pointer; color: var(--muted);
+  font-size: .82rem; font-weight: 600; padding: 6px; border-radius: 10px; min-height: 32px; }
+.mark:hover { background: var(--sky); }
+.mark.heart.on { color: #D9475A; }
+.mark.star.on { color: #E0A11B; }
+.mark.on svg { fill: currentColor; }
+.mark.big { font-size: .95rem; padding: 8px 14px; background: var(--sky); }
+.meal-actions { display: flex; gap: 10px; }
+.meal-hero { border-radius: var(--radius); overflow: hidden; aspect-ratio: 16 / 10; margin-bottom: 14px; background: var(--sky); box-shadow: var(--shadow); }
+.meal-hero img { width: 100%; height: 100%; object-fit: cover; }
+.meal-hero.small { aspect-ratio: 16 / 9; box-shadow: none; margin-bottom: 0; }
+.ingredients { margin: 0; padding-left: 20px; line-height: 1.8; }

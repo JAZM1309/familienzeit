@@ -301,3 +301,46 @@ export async function deleteAttachment(att) {
   check(await sb.from('attachments').delete().eq('id', att.id));
   await sb.storage.from(BUCKET).remove([att.storage_path]);
 }
+
+// ---------- Essenswünsche (ab Version 1.4) ----------
+const MEAL_SELECT = '*, meal_likes(user_id), meal_favorites(user_id)';
+
+export async function listMeals() {
+  return check(await sb.from('meal_wishes').select(MEAL_SELECT).order('created_at', { ascending: false }).limit(500));
+}
+
+export async function loadMeal(id) {
+  return check(await sb.from('meal_wishes').select(MEAL_SELECT).eq('id', id).maybeSingle());
+}
+
+export async function createMeal(row) {
+  return check(await sb.from('meal_wishes').insert(row).select('id').single()).id;
+}
+
+export async function updateMeal(id, patch) {
+  return check(await sb.from('meal_wishes').update(patch).eq('id', id));
+}
+
+export async function deleteMeal(meal) {
+  if (meal.image_path) await sb.storage.from(BUCKET).remove([meal.image_path]).catch(() => {});
+  return check(await sb.from('meal_wishes').delete().eq('id', meal.id));
+}
+
+export async function setMealCooked(id, cooked) {
+  return check(await sb.rpc('set_meal_cooked', { p_meal: id, p_cooked: cooked }));
+}
+
+export async function setMealMark(table, mealId, userId, on) {
+  if (on) return check(await sb.from(table).insert({ meal_id: mealId, user_id: userId }));
+  return check(await sb.from(table).delete().eq('meal_id', mealId).eq('user_id', userId));
+}
+
+export async function uploadMealImage(familyId, mealId, blob) {
+  const path = `${familyId}/meals/${mealId}/${crypto.randomUUID()}.${blob.type === 'image/webp' ? 'webp' : 'jpg'}`;
+  check(await sb.storage.from(BUCKET).upload(path, blob, { contentType: blob.type, cacheControl: '3600' }));
+  return path;
+}
+
+export async function removeFile(path) {
+  if (path) await sb.storage.from(BUCKET).remove([path]).catch(() => {});
+}

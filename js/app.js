@@ -8,6 +8,7 @@ import { calendarView } from './views/calendar.js';
 import { eventEditView } from './views/event-edit.js';
 import { notificationsView } from './views/notifications.js';
 import { tasksView, taskView, taskEditView } from './views/tasks.js';
+import { mealsView, mealView, mealEditView } from './views/meals.js';
 import { forgetDevice, refreshPush } from './push.js';
 
 const root = document.getElementById('app');
@@ -73,8 +74,9 @@ const PRIVATE = {
   '/': homeView, '/kalender': calendarView, '/termin': eventEditView, '/familie': familyView, '/profil': profileView,
   '/meldungen': notificationsView,
   '/aufgaben': tasksView, '/aufgabe': taskView, '/aufgabe-bearbeiten': taskEditView,
+  '/essen': mealsView, '/gericht': mealView, '/gericht-bearbeiten': mealEditView,
 };
-const NAV_OF = { '/termin': '/kalender', '/aufgabe': '/aufgaben', '/aufgabe-bearbeiten': '/aufgaben' };
+const NAV_OF = { '/termin': '/kalender', '/aufgabe': '/aufgaben', '/aufgabe-bearbeiten': '/aufgaben', '/gericht': '/essen', '/gericht-bearbeiten': '/essen' };
 
 function parseHash() {
   const raw = location.hash.replace(/^#/, '') || '/';
@@ -138,8 +140,8 @@ function shell(path, content) {
     nav('/', 'home', 'Start'),
     nav('/kalender', 'calendar', 'Kalender'),
     nav('/aufgaben', 'tasks', 'Aufgaben'),
-    nav('/familie', 'users', 'Familie'),
-    nav('/profil', 'user', 'Profil')));
+    nav('/essen', 'meal', 'Essen'),
+    nav('/familie', 'users', 'Familie')));
 
   return h('div', null, top, h('main', { class: 'wrap with-nav' }, content), bottom);
 }

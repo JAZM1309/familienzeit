@@ -70,6 +70,7 @@ const TYPES = [
   ['reminder', 'Erinnerungen (Termine und Aufgaben)'],
   ['task', 'Neue, zugewiesene und erledigte Aufgaben'],
   ['comment', 'Neue Kommentare'],
+  ['meal', 'Neue Essenswünsche'],
 ];
 
 export function notificationsCard() {
