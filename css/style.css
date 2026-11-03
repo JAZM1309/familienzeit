@@ -366,3 +366,9 @@ input[type="date"].input, input[type="time"].input { min-width: 0; }
 .ev-item, .ev-list { min-width: 0; }
 main { overflow-x: clip; }
 .week-day .ev-time { width: 46px; }
+
+/* App-Update */
+.progress { height: 8px; border-radius: 4px; background: var(--sky); overflow: hidden; margin-top: 10px; }
+.progress[hidden] { display: none; }
+.progress span { display: block; height: 100%; width: 0; background: var(--teal); transition: width .2s; }
+.btn.disabled { opacity: .5; pointer-events: none; }
