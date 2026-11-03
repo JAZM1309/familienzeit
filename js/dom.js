@@ -56,6 +56,15 @@ const ICONS = {
   smile: ['c:12,12,10', 'M8 14s1.5 2 4 2 4-2 4-2', 'M9 9h.01M15 9h.01'],
   download: ['M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4', 'M7 10l5 5 5-5', 'M12 15V3'],
   clock: ['c:12,12,10', 'M12 6v6l4 2'],
+  lock: ['r:3,11,18,11,2', 'M7 11V7a5 5 0 0 1 10 0v4'],
+  repeat: ['m17 2 4 4-4 4', 'M3 11v-1a4 4 0 0 1 4-4h14', 'm7 22-4-4 4-4', 'M21 13v1a4 4 0 0 1-4 4H3'],
+  pin: ['M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z', 'c:12,10,3'],
+  edit: ['M12 20h9', 'M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z'],
+  history: ['M3 12a9 9 0 1 0 3-6.7L3 8', 'M3 3v5h5', 'M12 7v5l4 2'],
+  left: ['m15 18-6-6 6-6'],
+  right: ['m9 18 6-6-6-6'],
+  text: ['M17 6H3', 'M21 12H3', 'M15 18H3'],
+  shield: ['M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'],
 };
 
 const SVGNS = 'http://www.w3.org/2000/svg';
@@ -200,6 +209,21 @@ export function avatar(member, size = 44, url) {
   else if (member?.avatar) { el.style.fontSize = Math.round(size * 0.55) + 'px'; el.append(member.avatar); }
   else el.append(initials(member?.display_name));
   return el;
+}
+
+// Auswahl zwischen mehreren Möglichkeiten, z. B. "Nur dieser Termin" / "Ganze Serie"
+export function choiceDialog({ title, text, choices }) {
+  return new Promise((resolve) => {
+    let answer = null;
+    sheet(title, (close) => h('div', null,
+      text ? h('p', { class: 'muted', style: { marginTop: 0 } }, text) : null,
+      h('div', { style: { display: 'grid', gap: '10px', marginTop: '8px' } },
+        choices.map((c) => h('button', {
+          class: 'btn block' + (c.danger ? ' danger' : c.primary ? '' : ' ghost'),
+          onClick: () => { answer = c.value; close(); },
+        }, c.label)))),
+    () => resolve(answer));
+  });
 }
 
 export const ROLE_LABEL = { admin: 'Administrator', parent: 'Elternteil', child: 'Kind' };

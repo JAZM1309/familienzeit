@@ -25,6 +25,10 @@ export function germanError(err) {
   if (msg.includes('rate limit') || msg.includes('too many')) return 'Zu viele Versuche. Bitte kurz warten.';
   if (msg.includes('unable to validate email') || msg.includes('invalid email')) return 'Bitte eine gültige E-Mail-Adresse eingeben.';
   if (msg.includes('kein platz')) return 'Für diese Rolle ist kein Platz mehr frei.';
+  if (msg.includes('konflikt')) return 'Der Termin wurde inzwischen von jemand anderem geändert. Bitte neu öffnen und noch einmal versuchen.';
+  if (msg.includes('keine berechtigung') || msg.includes('row-level security')) return 'Dafür fehlt dir die Berechtigung.';
+  if (msg.includes('nur der ersteller')) return 'Nur wer den Termin erstellt hat, kann die Sichtbarkeit ändern.';
+  if (msg.includes('eltern-terminen')) return 'Kinder können nicht zu „Nur Eltern“-Terminen zugeordnet werden.';
   if (msg.includes('nur der administrator')) return 'Das darf nur der Administrator.';
   if (msg.includes('payload too large') || msg.includes('maximum allowed size')) return 'Die Datei ist zu groß.';
   if (msg.includes('jwt') || msg.includes('not authenticated')) return 'Sitzung abgelaufen. Bitte neu anmelden.';
@@ -130,4 +134,39 @@ export async function signedUrls(paths) {
   const out = {};
   for (const r of rows || []) if (r.signedUrl) out[r.path] = r.signedUrl;
   return out;
+}
+
+// ---------- Kalender (ab Version 1.1) ----------
+const EVENT_SELECT = '*, event_participants(user_id), event_exceptions(*), event_reminders(offsets)';
+
+export async function eventsInRange(from, to) {
+  return check(await sb.rpc('events_in_range', { p_from: from.toISOString(), p_to: to.toISOString() })
+    .select(EVENT_SELECT));
+}
+
+export async function loadEvent(id) {
+  return check(await sb.from('events').select(EVENT_SELECT).eq('id', id).maybeSingle());
+}
+
+export async function saveEvent({ id, version, data, participants, reminders }) {
+  return check(await sb.rpc('save_event', {
+    p_id: id || null, p_version: version ?? null, p_data: data,
+    p_participants: participants, p_reminders: reminders,
+  }));
+}
+
+export async function deleteEvent(id) {
+  return check(await sb.from('events').delete().eq('id', id));
+}
+
+export async function saveException(row) {
+  return check(await sb.from('event_exceptions').upsert(row, { onConflict: 'event_id,original_start' }));
+}
+
+export async function eventHistory(id) {
+  return check(await sb.from('event_history').select('*').eq('event_id', id).order('at', { ascending: false }));
+}
+
+export async function clearExceptions(eventId) {
+  return check(await sb.from('event_exceptions').delete().eq('event_id', eventId));
 }

@@ -4,6 +4,8 @@ import { loginView, foundView, inviteView } from './views/auth.js';
 import { homeView } from './views/home.js';
 import { familyView } from './views/family.js';
 import { profileView } from './views/profile.js';
+import { calendarView } from './views/calendar.js';
+import { eventEditView } from './views/event-edit.js';
 
 const root = document.getElementById('app');
 
@@ -50,7 +52,10 @@ export function isAdmin() {
 
 // ---------- Routing ----------
 const PUBLIC = { '/anmelden': loginView, '/gruenden': foundView, '/einladung': inviteView };
-const PRIVATE = { '/': homeView, '/familie': familyView, '/profil': profileView };
+const PRIVATE = {
+  '/': homeView, '/kalender': calendarView, '/termin': eventEditView, '/familie': familyView, '/profil': profileView,
+};
+const NAV_OF = { '/termin': '/kalender' };
 
 function parseHash() {
   const raw = location.hash.replace(/^#/, '') || '/';
@@ -91,7 +96,7 @@ export async function render() {
   const view = PRIVATE[path] || homeView;
   const content = await view({ params });
   if (seq !== renderSeq) return;
-  root.replaceChildren(shell(path in PRIVATE ? path : '/', content));
+  root.replaceChildren(shell(NAV_OF[path] || (path in PRIVATE ? path : '/'), content));
   window.scrollTo(0, 0);
 }
 
@@ -111,6 +116,7 @@ function shell(path, content) {
 
   const bottom = h('nav', { class: 'bottomnav', 'aria-label': 'Hauptnavigation' }, h('div', { class: 'wrap' },
     nav('/', 'home', 'Start'),
+    nav('/kalender', 'calendar', 'Kalender'),
     nav('/familie', 'users', 'Familie'),
     nav('/profil', 'user', 'Profil')));
 
