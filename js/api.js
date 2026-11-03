@@ -25,7 +25,7 @@ export function germanError(err) {
   if (msg.includes('rate limit') || msg.includes('too many')) return 'Zu viele Versuche. Bitte kurz warten.';
   if (msg.includes('unable to validate email') || msg.includes('invalid email')) return 'Bitte eine gültige E-Mail-Adresse eingeben.';
   if (msg.includes('kein platz')) return 'Für diese Rolle ist kein Platz mehr frei.';
-  if (msg.includes('konflikt')) return 'Der Termin wurde inzwischen von jemand anderem geändert. Bitte neu öffnen und noch einmal versuchen.';
+  if (msg.includes('konflikt')) return 'Der Eintrag wurde inzwischen von jemand anderem geändert. Bitte neu öffnen und noch einmal versuchen.';
   if (msg.includes('keine berechtigung') || msg.includes('row-level security')) return 'Dafür fehlt dir die Berechtigung.';
   if (msg.includes('nur der ersteller')) return 'Nur wer den Termin erstellt hat, kann die Sichtbarkeit ändern.';
   if (msg.includes('eltern-terminen')) return 'Kinder können nicht zu „Nur Eltern“-Terminen zugeordnet werden.';
@@ -193,7 +193,7 @@ export async function sendTestPush() {
 
 export async function listNotifications(limit = 100) {
   return check(await sb.from('notifications')
-    .select('id, type, title, body, url, created_at, read_at')
+    .select('id, type, title, body, url, created_at, read_at, event_id, task_id')
     .order('created_at', { ascending: false })
     .limit(limit));
 }
@@ -215,4 +215,89 @@ export async function markAllRead() {
 
 export async function deleteReadNotifications() {
   return check(await sb.from('notifications').delete().not('read_at', 'is', null));
+}
+
+// ---------- Aufgaben (ab Version 1.3) ----------
+const TASK_SELECT = '*, task_assignees(user_id), task_reminders(offsets), comments(count)';
+
+export async function listTasks() {
+  return check(await sb.from('tasks').select(TASK_SELECT).order('created_at', { ascending: false }).limit(500));
+}
+
+export async function loadTask(id) {
+  return check(await sb.from('tasks').select(TASK_SELECT).eq('id', id).maybeSingle());
+}
+
+export async function saveTask({ id, version, data, assignees, reminders }) {
+  return check(await sb.rpc('save_task', {
+    p_id: id || null, p_version: version ?? null, p_data: data, p_assignees: assignees, p_reminders: reminders,
+  }));
+}
+
+export async function setTaskStatus(id, status) {
+  return check(await sb.from('tasks').update({ status }).eq('id', id));
+}
+
+export async function taskHistory(id) {
+  return check(await sb.from('task_history').select('*').eq('task_id', id).order('at', { ascending: false }));
+}
+
+// Erst die Dateien entfernen, dann den Eintrag (sonst blieben Dateien im Speicher liegen)
+async function removeFilesOf(column, id) {
+  const rows = check(await sb.from('attachments').select('storage_path').eq(column, id));
+  const paths = (rows || []).map((r) => r.storage_path);
+  if (paths.length) await sb.storage.from(BUCKET).remove(paths);
+}
+
+export async function deleteTask(id) {
+  await removeFilesOf('task_id', id).catch(() => {});
+  return check(await sb.from('tasks').delete().eq('id', id));
+}
+
+export async function deleteEventWithFiles(id) {
+  await removeFilesOf('event_id', id).catch(() => {});
+  return check(await sb.from('events').delete().eq('id', id));
+}
+
+// ---------- Kommentare und Anhänge ----------
+const targetCol = (t) => (t.eventId ? ['event_id', t.eventId] : ['task_id', t.taskId]);
+
+export async function listComments(target) {
+  const [col, id] = targetCol(target);
+  return check(await sb.from('comments').select('*').eq(col, id).order('created_at', { ascending: true }));
+}
+
+export async function addComment(target, familyId, authorId, body) {
+  const [col, id] = targetCol(target);
+  return check(await sb.from('comments').insert({ family_id: familyId, author_id: authorId, body, [col]: id }));
+}
+
+export async function deleteComment(id) {
+  return check(await sb.from('comments').delete().eq('id', id));
+}
+
+export async function listAttachments(target) {
+  const [col, id] = targetCol(target);
+  return check(await sb.from('attachments').select('*').eq(col, id).order('created_at', { ascending: true }));
+}
+
+export async function uploadAttachment(target, familyId, userId, blob, fileName) {
+  const [col, id] = targetCol(target);
+  const ext = { 'image/webp': 'webp', 'image/jpeg': 'jpg', 'image/png': 'png', 'application/pdf': 'pdf' }[blob.type];
+  const path = `${familyId}/${col === 'event_id' ? 'events' : 'tasks'}/${id}/${crypto.randomUUID()}.${ext}`;
+  check(await sb.storage.from(BUCKET).upload(path, blob, { contentType: blob.type, cacheControl: '3600' }));
+  try {
+    check(await sb.from('attachments').insert({
+      family_id: familyId, [col]: id, storage_path: path, file_name: fileName.slice(0, 200),
+      mime: blob.type, size_bytes: blob.size, uploaded_by: userId,
+    }));
+  } catch (e) {
+    await sb.storage.from(BUCKET).remove([path]);
+    throw e;
+  }
+}
+
+export async function deleteAttachment(att) {
+  check(await sb.from('attachments').delete().eq('id', att.id));
+  await sb.storage.from(BUCKET).remove([att.storage_path]);
 }

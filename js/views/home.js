@@ -5,11 +5,12 @@ import { startOfDay, addDays, toDateInput } from '../dates.js';
 import { expandAll } from '../recur.js';
 import { agendaItem } from '../events.js';
 import { notificationRow, openNotification } from './notifications.js';
+import { taskItem, assigneeIds } from './tasks.js';
 
 // Bereiche der Startseite. "version" = ab wann der Bereich Inhalte zeigt.
 const SECTIONS = {
   termine:  { title: 'Heutige Termine',       icon: 'calendar', version: null },
-  aufgaben: { title: 'Anstehende Aufgaben',   icon: 'tasks',    version: '1.3' },
+  aufgaben: { title: 'Anstehende Aufgaben',   icon: 'tasks',    version: null },
   einkauf:  { title: 'Offene Einkaufsartikel', icon: 'cart',    version: '1.5' },
   essen:    { title: 'Neue Essenswünsche',    icon: 'meal',     version: '1.4' },
   familie:  { title: 'Familienübersicht',     icon: 'users',    version: null },
@@ -35,6 +36,7 @@ function layout() {
 
 let today = [];
 let latest = [];
+let openTasks = [];
 
 function sectionCard(key) {
   const s = SECTIONS[key];
@@ -47,6 +49,14 @@ function sectionCard(key) {
         ? h('div', { class: 'ev-list' }, today.slice(0, 6).map((o) => agendaItem(o, render)),
           today.length > 6 ? h('button', { class: 'link-btn', onClick: () => go('/kalender?v=day') }, `+ ${today.length - 6} weitere`) : null)
         : h('div', { class: 'soon' }, icon('check', 16), 'Heute stehen keine Termine an.'));
+  }
+
+  if (key === 'aufgaben') {
+    head.append(h('button', { class: 'link-btn', onClick: () => go('/aufgaben') }, 'Alle'));
+    return h('section', { class: 'card' }, head,
+      openTasks.length
+        ? h('div', null, openTasks.map((t) => taskItem(t, render)))
+        : h('div', { class: 'soon' }, icon('check', 16), 'Keine anstehenden Aufgaben.'));
   }
 
   if (key === 'meldungen') {
@@ -111,7 +121,8 @@ function quickAdd() {
     return h('div', { class: 'quick-grid' },
       h('button', { onClick: () => { close(); go(`/termin?datum=${toDateInput(new Date())}`); } },
         h('span', { class: 'card-icon' }, icon('calendar', 19)), h('strong', null, 'Termin'), h('span', { class: 'muted small' }, 'Neuer Kalendereintrag')),
-      item('tasks', 'Aufgabe', '1.3'),
+      h('button', { onClick: () => { close(); go('/aufgabe-bearbeiten'); } },
+        h('span', { class: 'card-icon' }, icon('tasks', 19)), h('strong', null, 'Aufgabe'), h('span', { class: 'muted small' }, 'Neue Aufgabe')),
       item('meal', 'Essenswunsch', '1.4'),
       item('cart', 'Einkauf', '1.5'));
   });
@@ -168,6 +179,18 @@ export async function homeView() {
 
   today = [];
   latest = [];
+  openTasks = [];
+  if (visible.includes('aufgaben')) {
+    try {
+      const me = state.me.user_id;
+      const soon = Date.now() + 3 * 86400000;
+      openTasks = (await api.listTasks())
+        .filter((t) => t.status !== 'done' && (assigneeIds(t).includes(me) || assigneeIds(t).length === 0))
+        .filter((t) => !t.due_at || new Date(t.due_at).getTime() < soon || t.priority === 'high')
+        .sort((a, b) => (a.due_at ? new Date(a.due_at) : Infinity) - (b.due_at ? new Date(b.due_at) : Infinity))
+        .slice(0, 5);
+    } catch { /* egal */ }
+  }
   if (visible.includes('meldungen')) {
     try { latest = (await api.listNotifications(10)).filter((n) => !n.read_at).slice(0, 3); } catch { /* egal */ }
   }

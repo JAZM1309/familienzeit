@@ -8,9 +8,15 @@ const TYPE = {
   event_changed: { icon: 'edit', group: 'termine' },
   event_cancelled: { icon: 'x', group: 'termine' },
   event_deleted: { icon: 'trash', group: 'termine' },
-  reminder: { icon: 'bell', group: 'erinnerungen' },
+  reminder: { icon: 'bell', group: 'termine' },
   test: { icon: 'check', group: 'termine' },
+  task_new: { icon: 'tasks', group: 'aufgaben' },
+  task_assigned: { icon: 'user', group: 'aufgaben' },
+  task_done: { icon: 'check', group: 'aufgaben' },
+  task_reminder: { icon: 'bell', group: 'aufgaben' },
+  comment_new: { icon: 'text', group: null },
 };
+const groupOf = (n) => (TYPE[n.type] || TYPE.test).group || (n.task_id ? 'aufgaben' : 'termine');
 
 export function relTime(ts, now = new Date()) {
   const d = new Date(ts);
@@ -51,9 +57,9 @@ export async function notificationsView() {
   const list = h('div', { class: 'nf-list' });
   const seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Filter' });
   const draw = () => {
-    seg.replaceChildren(...[['alle', 'Alle'], ['ungelesen', 'Ungelesen'], ['termine', 'Termine'], ['erinnerungen', 'Erinnerungen']]
+    seg.replaceChildren(...[['alle', 'Alle'], ['ungelesen', 'Ungelesen'], ['termine', 'Termine'], ['aufgaben', 'Aufgaben']]
       .map(([v, label]) => h('button', { 'aria-pressed': String(v === filter), onClick: () => { filter = v; draw(); } }, label)));
-    const shown = rows.filter((n) => filter === 'alle' || (filter === 'ungelesen' ? !n.read_at : (TYPE[n.type] || TYPE.test).group === filter));
+    const shown = rows.filter((n) => filter === 'alle' || (filter === 'ungelesen' ? !n.read_at : groupOf(n) === filter));
     list.replaceChildren(...(shown.length
       ? shown.map((n) => notificationRow(n, async (x) => { await openNotification(x); x.read_at = x.read_at || new Date().toISOString(); draw(); }))
       : [h('p', { class: 'muted', style: { textAlign: 'center', padding: '24px 0', margin: 0 } },

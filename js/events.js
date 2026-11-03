@@ -4,6 +4,7 @@ import * as api from './api.js';
 import { state, urlFor, go } from './app.js';
 import { fmtTime, fmtDayShort, fmtDayLong, fmtDateTime, sameDay, addDays } from './dates.js';
 import { ruleText } from './recur.js';
+import { commentsBlock, attachmentsBlock } from './comments.js';
 
 export const FAMILY_COLOR = '#8496AE';
 export const VISIBILITY = {
@@ -39,6 +40,7 @@ export function canEdit(ev) {
 }
 
 export function reminderText(min) {
+  if (min === 0) return 'Bei Fälligkeit';
   if (REMINDER_TEXT[min]) return REMINDER_TEXT[min] + ' vorher';
   if (min % 1440 === 0) return `${min / 1440} Tage vorher`;
   if (min % 60 === 0) return `${min / 60} Std. vorher`;
@@ -128,14 +130,14 @@ export function openEvent(occ, onChange) {
         if (scope === 'all' && !(await confirmDialog({ title: 'Ganze Serie löschen?', text: 'Alle Termine dieser Serie werden gelöscht. Das lässt sich nicht rückgängig machen.', ok: 'Löschen', danger: true }))) return;
         try {
           if (scope === 'one') await api.saveException({ event_id: ev.id, original_start: occ.originalStart.toISOString(), cancelled: true });
-          else await api.deleteEvent(ev.id);
+          else await api.deleteEventWithFiles(ev.id);
           toast(scope === 'one' ? 'Termin abgesagt.' : 'Serie gelöscht.');
           onChange?.();
         } catch (e) { toast(api.germanError(e), { type: 'error' }); }
         return;
       }
       if (!(await confirmDialog({ title: 'Termin löschen?', text: `„${occ.title}“ wird gelöscht. Das lässt sich nicht rückgängig machen.`, ok: 'Löschen', danger: true }))) return;
-      try { await api.deleteEvent(ev.id); toast('Termin gelöscht.'); onChange?.(); }
+      try { await api.deleteEventWithFiles(ev.id); toast('Termin gelöscht.'); onChange?.(); }
       catch (e) { toast(api.germanError(e), { type: 'error' }); }
     };
 
@@ -167,7 +169,11 @@ export function openEvent(occ, onChange) {
         ? h('div', { class: 'btn-row', style: { marginTop: '16px' } },
           h('button', { class: 'btn', style: { flex: 1 }, onClick: edit }, icon('edit', 18), 'Bearbeiten'),
           h('button', { class: 'btn danger', style: { flex: 1 }, onClick: remove }, icon('trash', 18), 'Löschen'))
-        : h('p', { class: 'muted small' }, 'Bearbeiten können der Ersteller und die zugeordneten Personen.'));
+        : h('p', { class: 'muted small' }, 'Bearbeiten können der Ersteller und die zugeordneten Personen.'),
+      h('div', { class: 'section-title' }, 'Anhänge'),
+      attachmentsBlock({ eventId: ev.id }, editable),
+      h('div', { class: 'section-title' }, 'Kommentare'),
+      commentsBlock({ eventId: ev.id }));
   });
 }
 

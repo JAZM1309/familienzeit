@@ -67,7 +67,9 @@ export async function refreshPush() {
 const TYPES = [
   ['event_new', 'Neue Termine'],
   ['event_changed', 'Geänderte und abgesagte Termine'],
-  ['reminder', 'Erinnerungen'],
+  ['reminder', 'Erinnerungen (Termine und Aufgaben)'],
+  ['task', 'Neue, zugewiesene und erledigte Aufgaben'],
+  ['comment', 'Neue Kommentare'],
 ];
 
 export function notificationsCard() {

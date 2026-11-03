@@ -3,7 +3,7 @@
 // 1. berechnet fällige Erinnerungen, 2. verschickt offene Benachrichtigungen.
 import postgres from 'npm:postgres@3.4.5';
 import { generateVapidKeys, sendPush } from './webpush.js';
-import { dueReminders } from './reminders.js';
+import { dueReminders, toWall, fromWall } from './reminders.js';
 
 const SUBJECT = 'https://jazm1309.github.io/Familienzeit/';
 const sql = postgres(Deno.env.get('SUPABASE_DB_URL')!, { prepare: false, max: 1, idle_timeout: 20 });
@@ -40,6 +40,29 @@ async function createReminders(now: Date): Promise<number> {
   return created;
 }
 
+// Aufgaben: Erinnerung relativ zur Fälligkeit (ganztägig fällig = 9:00 Uhr am Fälligkeitstag)
+async function createTaskReminders(now: Date): Promise<number> {
+  const rows = await sql`
+    select r.user_id, r.offsets, t.id, t.title, t.due_at, t.due_all_day
+    from public.task_reminders r join public.tasks t on t.id = r.task_id
+    where t.status <> 'done' and t.due_at is not null
+      and t.due_at between now() - interval '1 day' and now() + interval '30 days'`;
+  const pseudo = rows.map((r) => ({
+    id: r.id, user_id: r.user_id, offsets: r.offsets, title: r.title, location: null, rrule: null,
+    all_day: false,
+    starts_at: r.due_all_day ? fromWall(new Date(toWall(new Date(r.due_at)).getTime() + 9 * 3600000)) : r.due_at,
+    due_at: r.due_at,
+  }));
+  let created = 0;
+  for (const d of dueReminders(pseudo, now)) {
+    const src = pseudo.find((p) => p.id === d.event_id)!;
+    const title = d.offset === 0 ? `Jetzt fällig: ${src.title}` : `Bald fällig: ${src.title}`;
+    const [r] = await sql`select public.add_task_reminder(${d.event_id}, ${d.user_id}, ${src.due_at}, ${d.offset}, ${title}, ${d.body}) as ok`;
+    if (r.ok) created++;
+  }
+  return created;
+}
+
 async function sendPending(vapid: Vapid): Promise<{ sent: number; failed: number }> {
   const batch = await sql`
     update public.notifications n set push_state = 'sending', pushed_at = now()
@@ -58,7 +81,7 @@ async function sendPending(vapid: Vapid): Promise<{ sent: number; failed: number
     }
     const [{ unread }] = await sql`select count(*)::int as unread from public.notifications where user_id = ${n.user_id} and read_at is null`;
     const payload = { id: n.id, type: n.type, title: n.title, body: n.body, url: n.url || '#/meldungen', unread };
-    const reminder = n.type === 'reminder';
+    const reminder = n.type === 'reminder' || n.type === 'task_reminder';
     let ok = false;
 
     for (const s of subs) {
@@ -101,7 +124,7 @@ Deno.serve(async (req) => {
     }
     const vapid = await ensureKeys(cfg);
     const now = new Date();
-    const reminders = await createReminders(now);
+    const reminders = await createReminders(now) + await createTaskReminders(now);
     const result = await sendPending(vapid);
     await housekeeping();
     return Response.json({ reminders, ...result });
