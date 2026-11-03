@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Familienzeit</title>
+  <meta name="description" content="Kalender, Aufgaben, Essenswünsche und Einkaufsliste für die ganze Familie.">
+  <meta name="theme-color" content="#F5F7FA">
+  <meta name="color-scheme" content="light dark">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Familienzeit">
+  <meta name="referrer" content="no-referrer">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app">
+    <div class="center-state"><div><div class="spinner"></div>Familienzeit wird geladen …</div></div>
+  </div>
+  <noscript>Familienzeit braucht JavaScript.</noscript>
+  <script>
+    window.addEventListener('error', function (e) {
+      if (String(e.message || '').indexOf('supabase-lib-missing') === -1) return;
+      document.getElementById('app').innerHTML =
+        '<div class="center-state"><div style="padding:24px">Familienzeit konnte nicht geladen werden.<br>' +
+        'Bitte Internetverbindung prüfen und neu laden.</div></div>';
+    });
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
