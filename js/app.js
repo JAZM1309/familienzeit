@@ -11,6 +11,8 @@ import { tasksView, taskView, taskEditView } from './views/tasks.js';
 import { mealsView, mealView, mealEditView } from './views/meals.js';
 import { shoppingView } from './views/shopping.js';
 import { forgetDevice, refreshPush } from './push.js';
+import { useAccount, forgetAccount, flush, onNetChange, net, sharedDevice } from './offline.js';
+import { lockEnabled, showLockScreen, watchBackground } from './lock.js';
 
 const root = document.getElementById('app');
 
@@ -39,6 +41,7 @@ try { applyUi(JSON.parse(localStorage.getItem(UI_KEY) || '{}')); } catch { apply
 
 // ---------- Daten ----------
 export async function loadData() {
+  useAccount(state.session?.user?.id || null);
   const { family, members } = await api.loadFamily();
   state.family = family;
   state.members = members;
@@ -149,11 +152,34 @@ function shell(path, content) {
     nav('/essen', 'meal', 'Essen'),
     nav('/einkauf', 'cart', 'Einkauf')));
 
-  return h('div', null, top, h('main', { class: 'wrap with-nav' }, content), bottom);
+  return h('div', null, top, netBanner(), h('main', { class: 'wrap with-nav' }, content), bottom);
+}
+
+// Hinweis bei fehlender Verbindung bzw. wartenden Änderungen
+function netBanner() {
+  const el = h('div', { class: 'net-banner', role: 'status', id: 'net-banner' });
+  const draw = () => {
+    const show = net.offline || net.pending > 0;
+    el.hidden = !show;
+    el.replaceChildren(icon(net.offline ? 'info' : 'repeat', 16), h('span', null,
+      net.offline ? 'Offline – du siehst den zuletzt geladenen Stand.' : 'Wird abgeglichen …',
+      net.pending ? ` ${net.pending === 1 ? '1 Änderung wartet' : net.pending + ' Änderungen warten'} auf Übertragung.` : ''));
+  };
+  draw();
+  return el;
+}
+onNetChange(() => {
+  const old = document.getElementById('net-banner');
+  if (old) old.replaceWith(netBanner());
+});
+
+function syncNow() {
+  return flush((op, e) => toast(`Eine offline gemachte Änderung konnte nicht übertragen werden (${api.germanError(e)}).`, { type: 'error', duration: 6000 }));
 }
 
 export async function logout() {
   await forgetDevice();
+  await forgetAccount();
   await api.signOut();
   state.session = null; state.me = null; state.family = null; state.members = []; state.urls = {};
   go('/anmelden');
@@ -164,6 +190,7 @@ export async function afterLogin(session) {
   state.session = session;
   await loadData();
   refreshPush();
+  syncNow();
   go('/');
 }
 
@@ -171,7 +198,14 @@ export async function afterLogin(session) {
 async function boot() {
   try {
     state.session = await api.getSession();
-    if (state.session) { await loadData(); refreshPush(); }
+    if (state.session) {
+      await loadData();
+      if (state.me && lockEnabled(state.me.user_id)) {
+        await showLockScreen(state.me.user_id, state.me.display_name, logout);
+      }
+      refreshPush();
+      syncNow().then(() => { if (net.pending === 0) render(); });
+    }
   } catch (e) {
     console.error(e);
     if (state.session) toast(api.germanError(e), { type: 'error' });
@@ -180,6 +214,7 @@ async function boot() {
   api.sb.auth.onAuthStateChange((event, session) => {
     if (event === 'SIGNED_OUT') {
       state.session = null; state.me = null;
+      forgetAccount();
       setTimeout(() => { if (!PUBLIC[parseHash().path]) go('/anmelden'); }, 0);
     } else if (session) {
       state.session = session;
@@ -187,6 +222,21 @@ async function boot() {
   });
 
   window.addEventListener('hashchange', render);
+  window.addEventListener('online', () => { syncNow().then(render); });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && state.session) syncNow(); });
+  watchBackground(() => state.me, (u) => showLockScreen(u.user_id, u.display_name, logout));
+
+  // Gemeinsam genutztes Gerät: nach 10 Minuten ohne Bedienung abmelden
+  let lastActive = Date.now();
+  for (const ev of ['pointerdown', 'keydown']) document.addEventListener(ev, () => { lastActive = Date.now(); }, { passive: true });
+  const idleCheck = () => {
+    if (state.session && sharedDevice() && Date.now() - lastActive > 10 * 60 * 1000) {
+      logout();
+      toast('Aus Sicherheitsgründen abgemeldet (gemeinsam genutztes Gerät).');
+    }
+  };
+  setInterval(idleCheck, 60 * 1000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') idleCheck(); });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refreshUnread(); });
   // Nachrichten vom Service Worker: neue Push-Meldung oder Klick auf eine Meldung
   navigator.serviceWorker?.addEventListener('message', (e) => {

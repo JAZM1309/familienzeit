@@ -4,6 +4,7 @@ import { state, urlFor, go, render } from '../app.js';
 import { startOfDay, addDays, toDateInput, toTimeInput, fromInputs, fromDateInput, fmtDayShort, fmtTime, fmtDateTime, daysBetween } from '../dates.js';
 import { reminderText, nameOf } from '../events.js';
 import { commentsBlock, attachmentsBlock } from '../comments.js';
+import { defaultReminders } from '../settings.js';
 
 const PRIORITY = { low: 'Niedrig', normal: 'Normal', high: 'Hoch' };
 const STATUS = { open: 'Offen', in_progress: 'In Bearbeitung', done: 'Erledigt' };
@@ -243,7 +244,7 @@ export async function taskEditView({ params }) {
   const dDate = h('input', { class: 'input', type: 'date', value: toDateInput(dueStart || addDays(startOfDay(new Date()), 1)) });
   const dTime = h('input', { class: 'input', type: 'time', value: t?.due_at && !t.due_all_day ? toTimeInput(new Date(t.due_at)) : '18:00' });
   const dueBox = h('div');
-  const reminders = new Set(t?.task_reminders?.[0]?.offsets || []);
+  const reminders = new Set(t ? (t.task_reminders?.[0]?.offsets || []) : defaultReminders('task'));
   const remWrap = h('div');
 
   const drawRem = () => {

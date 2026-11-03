@@ -1,6 +1,7 @@
 // Alle Zugriffe auf Supabase. Die Rechte prüft die Datenbank (RLS),
 // diese Datei ruft nur auf.
 import { SUPABASE_URL, SUPABASE_KEY } from './config.js';
+import { cached, cacheGet, cacheSet, enqueue, isNetworkError, registerHandler } from './offline.js';
 
 if (!window.supabase?.createClient) {
   throw new Error('supabase-lib-missing');
@@ -95,11 +96,13 @@ export async function openInvitations() {
 
 // ---------- Familie und Profile ----------
 export async function loadFamily() {
-  const [family, members] = await Promise.all([
-    sb.from('families').select('id, name, admin_id').maybeSingle().then(check),
-    sb.from('members').select('*').order('joined_at', { ascending: true }).then(check),
-  ]);
-  return { family, members };
+  return cached('family', async () => {
+    const [family, members] = await Promise.all([
+      sb.from('families').select('id, name, admin_id').maybeSingle().then(check),
+      sb.from('members').select('*').order('joined_at', { ascending: true }).then(check),
+    ]);
+    return { family, members };
+  });
 }
 
 export async function updateFamilyName(id, name) {
@@ -129,7 +132,7 @@ export async function removeAvatar(path) {
 
 // Zeitlich begrenzte Links zu privaten Bildern (1 Stunde)
 export async function signedUrls(paths) {
-  if (!paths.length) return {};
+  if (!paths.length || !navigator.onLine) return {};
   const rows = check(await sb.storage.from(BUCKET).createSignedUrls(paths, 3600));
   const out = {};
   for (const r of rows || []) if (r.signedUrl) out[r.path] = r.signedUrl;
@@ -139,13 +142,37 @@ export async function signedUrls(paths) {
 // ---------- Kalender (ab Version 1.1) ----------
 const EVENT_SELECT = '*, event_participants(user_id), event_exceptions(*), event_reminders(offsets)';
 
+// Offline-Zwischenspeicher: alle zuletzt geladenen Termine nach ID
+function inRange(e, from, to) {
+  if (new Date(e.starts_at) >= to) return false;
+  if (!e.rrule) return new Date(e.ends_at) > from;
+  return !e.until || new Date(e.until) >= new Date(from.getTime() - 2 * 86400000);
+}
+
 export async function eventsInRange(from, to) {
-  return check(await sb.rpc('events_in_range', { p_from: from.toISOString(), p_to: to.toISOString() })
-    .select(EVENT_SELECT));
+  try {
+    const rows = check(await sb.rpc('events_in_range', { p_from: from.toISOString(), p_to: to.toISOString() })
+      .select(EVENT_SELECT));
+    const all = (await cacheGet('events')) || {};
+    for (const id of Object.keys(all)) if (inRange(all[id], from, to)) delete all[id]; // gelöschte entfernen
+    for (const r of rows) all[r.id] = r;
+    cacheSet('events', all);
+    return rows;
+  } catch (e) {
+    if (!isNetworkError(e)) throw e;
+    const all = await cacheGet('events');
+    if (!all) throw e;
+    return Object.values(all).filter((r) => inRange(r, from, to));
+  }
 }
 
 export async function loadEvent(id) {
-  return check(await sb.from('events').select(EVENT_SELECT).eq('id', id).maybeSingle());
+  try {
+    return check(await sb.from('events').select(EVENT_SELECT).eq('id', id).maybeSingle());
+  } catch (e) {
+    if (!isNetworkError(e)) throw e;
+    return ((await cacheGet('events')) || {})[id] || null;
+  }
 }
 
 export async function saveEvent({ id, version, data, participants, reminders }) {
@@ -192,10 +219,10 @@ export async function sendTestPush() {
 }
 
 export async function listNotifications(limit = 100) {
-  return check(await sb.from('notifications')
+  return cached('notifications-' + limit, async () => check(await sb.from('notifications')
     .select('id, type, title, body, url, created_at, read_at, event_id, task_id')
     .order('created_at', { ascending: false })
-    .limit(limit));
+    .limit(limit)));
 }
 
 export async function unreadCount() {
@@ -221,11 +248,16 @@ export async function deleteReadNotifications() {
 const TASK_SELECT = '*, task_assignees(user_id), task_reminders(offsets), comments(count)';
 
 export async function listTasks() {
-  return check(await sb.from('tasks').select(TASK_SELECT).order('created_at', { ascending: false }).limit(500));
+  return cached('tasks', async () => check(await sb.from('tasks').select(TASK_SELECT).order('created_at', { ascending: false }).limit(500)));
 }
 
 export async function loadTask(id) {
-  return check(await sb.from('tasks').select(TASK_SELECT).eq('id', id).maybeSingle());
+  try {
+    return check(await sb.from('tasks').select(TASK_SELECT).eq('id', id).maybeSingle());
+  } catch (e) {
+    if (!isNetworkError(e)) throw e;
+    return ((await cacheGet('tasks')) || []).find((t) => t.id === id) || null;
+  }
 }
 
 export async function saveTask({ id, version, data, assignees, reminders }) {
@@ -234,8 +266,21 @@ export async function saveTask({ id, version, data, assignees, reminders }) {
   }));
 }
 
+async function patchCachedList(key, fn) {
+  const list = await cacheGet(key);
+  if (Array.isArray(list)) await cacheSet(key, fn(list));
+}
+
+registerHandler('task_status', async (op) => check(await sb.from('tasks').update({ status: op.status }).eq('id', op.id)));
+
 export async function setTaskStatus(id, status) {
-  return check(await sb.from('tasks').update({ status }).eq('id', id));
+  try {
+    return check(await sb.from('tasks').update({ status }).eq('id', id));
+  } catch (e) {
+    if (!isNetworkError(e)) throw e;
+    await enqueue({ type: 'task_status', id, status });
+    await patchCachedList('tasks', (l) => l.map((t) => (t.id === id ? { ...t, status, done_at: status === 'done' ? new Date().toISOString() : null } : t)));
+  }
 }
 
 export async function taskHistory(id) {
@@ -264,7 +309,7 @@ const targetCol = (t) => (t.eventId ? ['event_id', t.eventId] : ['task_id', t.ta
 
 export async function listComments(target) {
   const [col, id] = targetCol(target);
-  return check(await sb.from('comments').select('*').eq(col, id).order('created_at', { ascending: true }));
+  return cached(`comments-${id}`, async () => check(await sb.from('comments').select('*').eq(col, id).order('created_at', { ascending: true })));
 }
 
 export async function addComment(target, familyId, authorId, body) {
@@ -278,7 +323,7 @@ export async function deleteComment(id) {
 
 export async function listAttachments(target) {
   const [col, id] = targetCol(target);
-  return check(await sb.from('attachments').select('*').eq(col, id).order('created_at', { ascending: true }));
+  return cached(`attachments-${id}`, async () => check(await sb.from('attachments').select('*').eq(col, id).order('created_at', { ascending: true })));
 }
 
 export async function uploadAttachment(target, familyId, userId, blob, fileName) {
@@ -306,11 +351,16 @@ export async function deleteAttachment(att) {
 const MEAL_SELECT = '*, meal_likes(user_id), meal_favorites(user_id)';
 
 export async function listMeals() {
-  return check(await sb.from('meal_wishes').select(MEAL_SELECT).order('created_at', { ascending: false }).limit(500));
+  return cached('meals', async () => check(await sb.from('meal_wishes').select(MEAL_SELECT).order('created_at', { ascending: false }).limit(500)));
 }
 
 export async function loadMeal(id) {
-  return check(await sb.from('meal_wishes').select(MEAL_SELECT).eq('id', id).maybeSingle());
+  try {
+    return check(await sb.from('meal_wishes').select(MEAL_SELECT).eq('id', id).maybeSingle());
+  } catch (e) {
+    if (!isNetworkError(e)) throw e;
+    return ((await cacheGet('meals')) || []).find((m) => m.id === id) || null;
+  }
 }
 
 export async function createMeal(row) {
@@ -347,23 +397,65 @@ export async function removeFile(path) {
 
 // ---------- Einkaufsliste (ab Version 1.5) ----------
 export async function listShopping() {
-  return check(await sb.from('shopping_items').select('*').order('created_at', { ascending: true }).limit(1000));
+  return cached('shopping', async () => check(await sb.from('shopping_items').select('*').order('created_at', { ascending: true }).limit(1000)));
+}
+
+// Änderungen an der Einkaufsliste funktionieren auch ohne Netz
+registerHandler('shopping_add', async (op) => {
+  const { error } = await sb.from('shopping_items').insert(op.rows);
+  if (error && error.code !== '23505') throw error; // 23505 = schon übertragen
+});
+registerHandler('shopping_update', async (op) => check(await sb.from('shopping_items').update(op.patch).eq('id', op.id)));
+registerHandler('shopping_delete', async (op) => check(await sb.from('shopping_items').delete().eq('id', op.id)));
+registerHandler('shopping_delete_done', async (op) => check(await sb.from('shopping_items').delete().in('id', op.ids)));
+
+async function offlineOr(run, op, patchCache) {
+  try {
+    return await run();
+  } catch (e) {
+    if (!isNetworkError(e)) throw e;
+    await enqueue(op);
+    await patchCachedList('shopping', patchCache);
+  }
 }
 
 export async function addShopping(items) {
-  return check(await sb.from('shopping_items').insert(items));
+  for (const i of items) i.id = i.id || crypto.randomUUID();
+  const now = new Date().toISOString();
+  return offlineOr(async () => check(await sb.from('shopping_items').insert(items)),
+    { type: 'shopping_add', rows: items },
+    (l) => [...l, ...items.map((i) => ({ ...i, done: false, created_at: now }))]);
 }
 
 export async function updateShopping(id, patch) {
-  return check(await sb.from('shopping_items').update(patch).eq('id', id));
+  return offlineOr(async () => check(await sb.from('shopping_items').update(patch).eq('id', id)),
+    { type: 'shopping_update', id, patch },
+    (l) => l.map((i) => (i.id === id ? { ...i, ...patch, done_at: patch.done ? new Date().toISOString() : i.done_at } : i)));
 }
 
 export async function deleteShopping(id) {
-  return check(await sb.from('shopping_items').delete().eq('id', id));
+  return offlineOr(async () => check(await sb.from('shopping_items').delete().eq('id', id)),
+    { type: 'shopping_delete', id }, (l) => l.filter((i) => i.id !== id));
 }
 
 export async function deleteDoneShopping() {
-  return check(await sb.from('shopping_items').delete().eq('done', true));
+  const ids = ((await cacheGet('shopping')) || []).filter((i) => i.done).map((i) => i.id);
+  return offlineOr(async () => check(await sb.from('shopping_items').delete().eq('done', true)),
+    { type: 'shopping_delete_done', ids }, (l) => l.filter((i) => !i.done));
+}
+
+// ---------- Geräte (ab Version 1.6) ----------
+export async function mySessions() {
+  return check(await sb.rpc('my_sessions'));
+}
+
+export async function revokeSession(id) {
+  return check(await sb.rpc('revoke_session', { p_id: id }));
+}
+
+export async function signOutOthers() {
+  const { error } = await sb.auth.signOut({ scope: 'others' });
+  if (error) throw error;
 }
 
 // Live-Änderungen anderer Geräte

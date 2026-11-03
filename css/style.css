@@ -484,3 +484,13 @@ main { overflow-x: clip; }
 .danger-link { color: var(--danger); }
 .pick-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
 .pick-row input { width: 20px; height: 20px; accent-color: var(--teal); }
+
+/* =================== Version 1.6: Offline, Sperre =================== */
+.net-banner { position: sticky; top: calc(56px + env(safe-area-inset-top)); z-index: 19; display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: color-mix(in srgb, var(--orange) 22%, var(--bg)); color: var(--text); font-size: .82rem; padding: 6px 16px; text-align: center; }
+.net-banner[hidden] { display: none; }
+.lock-screen { position: fixed; inset: 0; z-index: 100; background: var(--bg); display: grid; place-items: center; padding: 24px; }
+.lock-box { width: 100%; max-width: 340px; text-align: center; }
+.lock-box .logo { width: 76px; height: 76px; border-radius: 22px; margin: 0 auto 14px; box-shadow: 0 8px 24px rgba(23,59,99,.22); }
+.lock-box h1 { margin: 0 0 4px; font-size: 1.6rem; }
+.toggle input:disabled + span { opacity: .45; }

@@ -6,6 +6,7 @@ import {
 } from '../dates.js';
 import { parseRule, buildRule, DAY_CODES, dayCode } from '../recur.js';
 import { VISIBILITY, reminderText, canEdit } from '../events.js';
+import { defaultReminders } from '../settings.js';
 
 const PRESETS = [5, 15, 30, 60, 1440];
 const REPEAT_OPTIONS = [
@@ -184,7 +185,7 @@ export async function eventEditView({ params }) {
   unitSel.addEventListener('change', drawRepeat);
 
   // Erinnerungen (persönlich)
-  const reminders = new Set(ev?.event_reminders?.[0]?.offsets || []);
+  const reminders = new Set(ev ? (ev.event_reminders?.[0]?.offsets || []) : defaultReminders('event'));
   const remWrap = h('div');
   const drawRem = () => {
     const all = [...new Set([...PRESETS, ...reminders])].sort((a, b) => a - b);
