@@ -1,6 +1,6 @@
 // Familienzeit Service Worker
 // Bei jeder neuen Version VERSION erhöhen, damit Geräte das Update laden.
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const CACHE = 'familienzeit-' + VERSION;
 const SHELL = [
   './',
@@ -15,6 +15,11 @@ const SHELL = [
   'js/views/home.js',
   'js/views/family.js',
   'js/views/profile.js',
+  'js/views/calendar.js',
+  'js/views/event-edit.js',
+  'js/dates.js',
+  'js/recur.js',
+  'js/events.js',
   'icons/icon-192.png',
   'icons/icon-512.png',
   'icons/apple-touch-icon.png',
