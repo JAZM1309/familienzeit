@@ -33,4 +33,4 @@ jobs:
           version: latest
 
       - name: Push-Funktion veröffentlichen
-        run: supabase functions deploy push --project-ref "$PROJECT_REF" --no-verify-jwt
+        run: supabase functions deploy push --project-ref "$PROJECT_REF" --no-verify-jwt --yes
