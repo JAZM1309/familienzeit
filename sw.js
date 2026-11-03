@@ -1,6 +1,6 @@
 // Familienzeit Service Worker
 // Bei jeder neuen Version VERSION erhöhen, damit Geräte das Update laden.
-const VERSION = '1.1.0';
+const VERSION = '1.1.1';
 const CACHE = 'familienzeit-' + VERSION;
 const SHELL = [
   './',
@@ -28,7 +28,8 @@ const SHELL = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)));
+  // cache: 'reload' umgeht den Browser-Zwischenspeicher, damit wirklich die neuen Dateien geladen werden
+  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' })))));
 });
 
 self.addEventListener('activate', (event) => {
