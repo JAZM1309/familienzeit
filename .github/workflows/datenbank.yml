@@ -1,0 +1,66 @@
+# Spielt neue SQL-Skripte aus supabase/migrations automatisch in Supabase ein.
+# Jedes Skript läuft genau einmal (vermerkt in fz_meta.migrations).
+# Benötigt das Repository-Secret SUPABASE_DB_URL (Session-Pooler-Adresse mit Passwort).
+name: Datenbank aktualisieren
+
+on:
+  push:
+    branches: [main]
+    paths: ['supabase/migrations/**']
+  workflow_dispatch:
+
+concurrency:
+  group: datenbank
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verbindung prüfen
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$DB_URL" ]; then
+            echo "::error::Das Secret SUPABASE_DB_URL fehlt (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+          command -v psql >/dev/null || (sudo apt-get -qq update && sudo apt-get -qq install -y postgresql-client)
+          psql "$DB_URL" -tAc "select 'Verbindung ok'"
+
+      - name: Neue Skripte einspielen
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          PGOPTIONS: '-c client_min_messages=warning'
+        run: |
+          set -euo pipefail
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q <<'SQL'
+          create schema if not exists fz_meta;
+          revoke all on schema fz_meta from public;
+          create table if not exists fz_meta.migrations (
+            name text primary key,
+            applied_at timestamptz not null default now()
+          );
+          -- 01 und 02 wurden von Hand im SQL-Editor eingespielt
+          insert into fz_meta.migrations (name)
+            select '01_version_1_0.sql' where to_regclass('public.families') is not null
+            on conflict do nothing;
+          insert into fz_meta.migrations (name)
+            select '02_version_1_1.sql' where to_regclass('public.events') is not null
+            on conflict do nothing;
+          SQL
+
+          for f in $(ls supabase/migrations/*.sql | sort); do
+            n=$(basename "$f")
+            if [ "$(psql "$DB_URL" -tAc "select 1 from fz_meta.migrations where name = '$n'")" = "1" ]; then
+              echo "✓ $n – schon eingespielt"
+              continue
+            fi
+            echo "→ $n wird eingespielt …"
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -q --single-transaction \
+              -f "$f" \
+              -c "insert into fz_meta.migrations (name) values ('$n')"
+            echo "✓ $n eingespielt"
+          done
