@@ -9,6 +9,7 @@ import { eventEditView } from './views/event-edit.js';
 import { notificationsView } from './views/notifications.js';
 import { tasksView, taskView, taskEditView } from './views/tasks.js';
 import { mealsView, mealView, mealEditView } from './views/meals.js';
+import { shoppingView } from './views/shopping.js';
 import { forgetDevice, refreshPush } from './push.js';
 
 const root = document.getElementById('app');
@@ -75,6 +76,7 @@ const PRIVATE = {
   '/meldungen': notificationsView,
   '/aufgaben': tasksView, '/aufgabe': taskView, '/aufgabe-bearbeiten': taskEditView,
   '/essen': mealsView, '/gericht': mealView, '/gericht-bearbeiten': mealEditView,
+  '/einkauf': shoppingView,
 };
 const NAV_OF = { '/termin': '/kalender', '/aufgabe': '/aufgaben', '/aufgabe-bearbeiten': '/aufgaben', '/gericht': '/essen', '/gericht-bearbeiten': '/essen' };
 
@@ -130,6 +132,10 @@ function shell(path, content) {
   const top = h('header', { class: 'topbar' }, h('div', { class: 'wrap' },
     h('div', { class: 'brand' }, h('img', { src: 'icons/icon-192.png', alt: '' }), 'Familienzeit'),
     h('button', {
+      class: 'iconbtn', 'aria-label': 'Familie', 'aria-current': path === '/familie' ? 'page' : null,
+      onClick: () => go('/familie'),
+    }, icon('users')),
+    h('button', {
       class: 'iconbtn', 'aria-label': 'Benachrichtigungen', 'aria-current': path === '/meldungen' ? 'page' : null,
       onClick: () => go('/meldungen'),
     }, icon('bell'), h('span', { class: 'badge-dot', id: 'bell-dot', hidden: state.unread === 0 })),
@@ -141,7 +147,7 @@ function shell(path, content) {
     nav('/kalender', 'calendar', 'Kalender'),
     nav('/aufgaben', 'tasks', 'Aufgaben'),
     nav('/essen', 'meal', 'Essen'),
-    nav('/familie', 'users', 'Familie')));
+    nav('/einkauf', 'cart', 'Einkauf')));
 
   return h('div', null, top, h('main', { class: 'wrap with-nav' }, content), bottom);
 }

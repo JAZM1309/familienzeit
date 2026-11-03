@@ -344,3 +344,32 @@ export async function uploadMealImage(familyId, mealId, blob) {
 export async function removeFile(path) {
   if (path) await sb.storage.from(BUCKET).remove([path]).catch(() => {});
 }
+
+// ---------- Einkaufsliste (ab Version 1.5) ----------
+export async function listShopping() {
+  return check(await sb.from('shopping_items').select('*').order('created_at', { ascending: true }).limit(1000));
+}
+
+export async function addShopping(items) {
+  return check(await sb.from('shopping_items').insert(items));
+}
+
+export async function updateShopping(id, patch) {
+  return check(await sb.from('shopping_items').update(patch).eq('id', id));
+}
+
+export async function deleteShopping(id) {
+  return check(await sb.from('shopping_items').delete().eq('id', id));
+}
+
+export async function deleteDoneShopping() {
+  return check(await sb.from('shopping_items').delete().eq('done', true));
+}
+
+// Live-Änderungen anderer Geräte
+export function watchShopping(onChange) {
+  const channel = sb.channel('einkauf-' + Math.random().toString(36).slice(2))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'shopping_items' }, () => onChange())
+    .subscribe();
+  return () => { sb.removeChannel(channel); };
+}

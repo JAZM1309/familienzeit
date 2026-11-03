@@ -71,7 +71,9 @@ const TYPES = [
   ['task', 'Neue, zugewiesene und erledigte Aufgaben'],
   ['comment', 'Neue Kommentare'],
   ['meal', 'Neue Essenswünsche'],
+  ['shopping', 'Neue Artikel auf der Einkaufsliste'],
 ];
+const DEFAULT_OFF = new Set(['shopping']);
 
 export function notificationsCard() {
   const card = h('section', { class: 'card' });
@@ -130,7 +132,7 @@ export function notificationsCard() {
       h('span', null, label),
       h('label', { class: 'toggle' },
         h('input', {
-          type: 'checkbox', checked: notify[key] !== false, 'aria-label': label,
+          type: 'checkbox', checked: DEFAULT_OFF.has(key) ? notify[key] === true : notify[key] !== false, 'aria-label': label,
           onChange: async (e) => {
             const settings = { ...(state.me.settings || {}), notify: { ...(state.me.settings?.notify || {}), [key]: e.target.checked } };
             try { await api.updateMe(state.me.user_id, { settings }); state.me.settings = settings; }

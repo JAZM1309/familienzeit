@@ -7,12 +7,13 @@ import { agendaItem } from '../events.js';
 import { notificationRow, openNotification } from './notifications.js';
 import { taskItem, assigneeIds } from './tasks.js';
 import { mealCard } from './meals.js';
+import { itemLabel } from '../shopping-parse.js';
 
 // Bereiche der Startseite. "version" = ab wann der Bereich Inhalte zeigt.
 const SECTIONS = {
   termine:  { title: 'Heutige Termine',       icon: 'calendar', version: null },
   aufgaben: { title: 'Anstehende Aufgaben',   icon: 'tasks',    version: null },
-  einkauf:  { title: 'Offene Einkaufsartikel', icon: 'cart',    version: '1.5' },
+  einkauf:  { title: 'Offene Einkaufsartikel', icon: 'cart',    version: null },
   essen:    { title: 'Neue Essenswünsche',    icon: 'meal',     version: null },
   familie:  { title: 'Familienübersicht',     icon: 'users',    version: null },
   meldungen:{ title: 'Benachrichtigungen',    icon: 'bell',     version: null },
@@ -39,6 +40,7 @@ let today = [];
 let latest = [];
 let openTasks = [];
 let meals = [];
+let shop = [];
 let mealUrls = {};
 
 function sectionCard(key) {
@@ -52,6 +54,16 @@ function sectionCard(key) {
         ? h('div', { class: 'ev-list' }, today.slice(0, 6).map((o) => agendaItem(o, render)),
           today.length > 6 ? h('button', { class: 'link-btn', onClick: () => go('/kalender?v=day') }, `+ ${today.length - 6} weitere`) : null)
         : h('div', { class: 'soon' }, icon('check', 16), 'Heute stehen keine Termine an.'));
+  }
+
+  if (key === 'einkauf') {
+    head.append(h('button', { class: 'link-btn', onClick: () => go('/einkauf') }, 'Liste'));
+    return h('section', { class: 'card' }, head,
+      shop.length
+        ? h('div', null,
+          h('div', { class: 'chips' }, shop.slice(0, 12).map((i) => h('span', { class: 'chip', style: { paddingLeft: '10px' } }, itemLabel(i)))),
+          shop.length > 12 ? h('p', { class: 'muted small', style: { margin: '8px 0 0' } }, `und ${shop.length - 12} weitere`) : null)
+        : h('div', { class: 'soon' }, icon('check', 16), 'Die Einkaufsliste ist leer.'));
   }
 
   if (key === 'essen') {
@@ -136,7 +148,8 @@ function quickAdd() {
         h('span', { class: 'card-icon' }, icon('tasks', 19)), h('strong', null, 'Aufgabe'), h('span', { class: 'muted small' }, 'Neue Aufgabe')),
       h('button', { onClick: () => { close(); go('/gericht-bearbeiten'); } },
         h('span', { class: 'card-icon' }, icon('meal', 19)), h('strong', null, 'Essenswunsch'), h('span', { class: 'muted small' }, 'Was möchtest du essen?')),
-      item('cart', 'Einkauf', '1.5'));
+      h('button', { onClick: () => { close(); go('/einkauf?neu=1'); } },
+        h('span', { class: 'card-icon' }, icon('cart', 19)), h('strong', null, 'Einkauf'), h('span', { class: 'muted small' }, 'Artikel hinzufügen')));
   });
 }
 
@@ -193,6 +206,10 @@ export async function homeView() {
   latest = [];
   openTasks = [];
   meals = [];
+  shop = [];
+  if (visible.includes('einkauf')) {
+    try { shop = (await api.listShopping()).filter((i) => !i.done); } catch { /* egal */ }
+  }
   if (visible.includes('essen')) {
     try {
       meals = (await api.listMeals()).filter((m) => !m.cooked).slice(0, 6);

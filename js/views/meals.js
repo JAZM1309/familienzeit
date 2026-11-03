@@ -4,6 +4,7 @@ import { state, urlFor, go, render } from '../app.js';
 import { fmtDate } from '../dates.js';
 import { nameOf } from '../events.js';
 import { compressImage } from '../comments.js';
+import { addToShopping } from './shopping.js';
 
 const me = () => state.me.user_id;
 const likes = (m) => (m.meal_likes || []).map((l) => l.user_id);
@@ -93,6 +94,28 @@ export async function mealsView() {
     h('button', { class: 'fab', 'aria-label': 'Neuer Essenswunsch', onClick: () => go('/gericht-bearbeiten') }, icon('plus', 28)));
 }
 
+// Zutaten auswählen und auf die Einkaufsliste setzen
+function pickIngredients(lines) {
+  const chosen = new Set(lines.map((_, i) => i));
+  sheet('Auf die Einkaufsliste', (close) => {
+    const add = h('button', { class: 'btn teal block', style: { marginTop: '14px' } }, icon('cart', 18), 'Hinzufügen');
+    add.addEventListener('click', async () => {
+      add.disabled = true;
+      try {
+        const n = await addToShopping(lines.filter((_, i) => chosen.has(i)));
+        close();
+        toast(n === 1 ? '1 Artikel hinzugefügt.' : `${n} Artikel hinzugefügt.`, { action: 'Zur Liste', onAction: () => go('/einkauf') });
+      } catch (e) { toast(api.germanError(e), { type: 'error' }); add.disabled = false; }
+    });
+    return h('div', null,
+      h('p', { class: 'muted small', style: { marginTop: 0 } }, 'Was fehlt? Abwählen, was schon im Haus ist.'),
+      lines.map((l, i) => h('label', { class: 'pick-row' },
+        h('input', { type: 'checkbox', checked: true, onChange: (e) => { if (e.target.checked) chosen.add(i); else chosen.delete(i); } }),
+        h('span', null, l))),
+      add);
+  });
+}
+
 // ---------- Detail ----------
 export async function mealView({ params }) {
   let m = null;
@@ -134,7 +157,8 @@ export async function mealView({ params }) {
       m.description ? h('p', { class: 'pre', style: { marginBottom: 0 } }, m.description) : null),
     ingredients.length ? h('section', { class: 'card' },
       h('div', { class: 'card-head' }, h('div', { class: 'card-icon' }, icon('cart', 19)), h('h2', null, 'Zutaten')),
-      h('ul', { class: 'ingredients' }, ingredients.map((x) => h('li', null, x)))) : null,
+      h('ul', { class: 'ingredients' }, ingredients.map((x) => h('li', null, x))),
+      h('button', { class: 'btn ghost block', style: { marginTop: '12px' }, onClick: () => pickIngredients(ingredients) }, icon('cart', 18), 'Auf die Einkaufsliste')) : null,
     m.recipe || m.recipe_url ? h('section', { class: 'card' },
       h('div', { class: 'card-head' }, h('div', { class: 'card-icon' }, icon('text', 19)), h('h2', null, 'Rezept')),
       m.recipe ? h('div', { class: 'pre' }, m.recipe) : null,
