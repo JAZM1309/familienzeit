@@ -1,6 +1,6 @@
 // Familienzeit Service Worker
 // Bei jeder neuen Version VERSION erhöhen, damit Geräte das Update laden.
-const VERSION = '1.8.3';
+const VERSION = '1.8.4';
 const CACHE = 'familienzeit-' + VERSION;
 const SHELL = [
   './',
@@ -39,6 +39,10 @@ const SHELL = [
   'js/boot-error.js',
   'js/gestures.js',
   'icons/badge-96.png',
+  'icons/shortcut-termin.png',
+  'icons/shortcut-aufgabe.png',
+  'icons/shortcut-einkauf.png',
+  'icons/shortcut-essen.png',
   'icons/icon-192.png',
   'icons/icon-512.png',
   'icons/apple-touch-icon.png',
