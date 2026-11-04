@@ -494,3 +494,13 @@ main { overflow-x: clip; }
 .lock-box .logo { width: 76px; height: 76px; border-radius: 22px; margin: 0 auto 14px; box-shadow: 0 8px 24px rgba(23,59,99,.22); }
 .lock-box h1 { margin: 0 0 4px; font-size: 1.6rem; }
 .toggle input:disabled + span { opacity: .45; }
+
+/* =================== Version 1.7: Import und externe Kalender =================== */
+.imp-list .pick-row { align-items: flex-start; }
+.imp-list .pick-row input { margin-top: 3px; flex: none; }
+.imp-list .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.imp-title { font-weight: 600; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.imp-sub { font-size: .82rem; color: var(--muted); }
+.steps { margin: 6px 0 0; padding-left: 18px; font-size: .86rem; line-height: 1.5; }
+.switch-row[hidden] { display: none; }
+.cal-nav .iconbtn { width: 38px; height: 38px; }

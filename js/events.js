@@ -16,6 +16,7 @@ const REMINDER_TEXT = { 5: '5 Min.', 15: '15 Min.', 30: '30 Min.', 60: '1 Std.',
 
 export function memberById(id) { return state.members.find((m) => m.user_id === id); }
 export function nameOf(id) {
+  if (!id) return 'Externer Kalender';
   if (id === state.me.user_id) return 'Du';
   return memberById(id)?.display_name || 'Jemand';
 }
@@ -34,6 +35,7 @@ export function colorsFor(ev) {
 
 // Spiegelt die Regel der Datenbank (die Datenbank entscheidet trotzdem selbst)
 export function canEdit(ev) {
+  if (ev.feed_id) return false; // aus externem Kalender: nur lesbar
   const me = state.me.user_id;
   const ids = participantIds(ev);
   return ev.owner_id === me || ids.includes(me) || ids.length === 0;
@@ -68,6 +70,7 @@ function badges(ev) {
     ev.visibility === 'private' ? h('span', { class: 'ev-tag', title: 'Persönlich' }, icon('lock', 13)) : null,
     ev.visibility === 'parents' ? h('span', { class: 'ev-tag text' }, 'Eltern') : null,
     ev.rrule ? h('span', { class: 'ev-tag', title: 'Wiederholt sich' }, icon('repeat', 13)) : null,
+    ev.feed_id ? h('span', { class: 'ev-tag', title: 'Aus externem Kalender' }, icon('link', 13)) : null,
   ];
 }
 
@@ -155,6 +158,9 @@ export function openEvent(occ, onChange) {
         target: '_blank', rel: 'noopener noreferrer',
       }, occ.location)) : null,
       row('users', who),
+      ev.feed_id ? row('link', 'Aus einem externen Kalender' + (ev.owner_id === state.me.user_id ? '' : ` von ${nameOf(ev.owner_id)}`),
+        h('div', { class: 'muted small' }, 'Wird automatisch abgeglichen. Ändern bitte im Ursprungskalender.')) : null,
+      ev.source === 'ics' ? row('download', 'Aus einer Kalenderdatei importiert') : null,
       row(ev.visibility === 'private' ? 'lock' : 'shield', VISIBILITY[ev.visibility].label,
         h('div', { class: 'muted small' }, VISIBILITY[ev.visibility].hint)),
       row('bell', mine.length ? mine.map(reminderText).join(', ') : 'Keine Erinnerung',
@@ -169,7 +175,7 @@ export function openEvent(occ, onChange) {
         ? h('div', { class: 'btn-row', style: { marginTop: '16px' } },
           h('button', { class: 'btn', style: { flex: 1 }, onClick: edit }, icon('edit', 18), 'Bearbeiten'),
           h('button', { class: 'btn danger', style: { flex: 1 }, onClick: remove }, icon('trash', 18), 'Löschen'))
-        : h('p', { class: 'muted small' }, 'Bearbeiten können der Ersteller und die zugeordneten Personen.'),
+        : h('p', { class: 'muted small' }, ev.feed_id ? 'Termine aus externen Kalendern lassen sich hier nicht bearbeiten.' : 'Bearbeiten können der Ersteller und die zugeordneten Personen.'),
       h('div', { class: 'section-title' }, 'Anhänge'),
       attachmentsBlock({ eventId: ev.id }, editable),
       h('div', { class: 'section-title' }, 'Kommentare'),

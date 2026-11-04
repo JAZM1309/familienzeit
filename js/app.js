@@ -10,6 +10,7 @@ import { notificationsView } from './views/notifications.js';
 import { tasksView, taskView, taskEditView } from './views/tasks.js';
 import { mealsView, mealView, mealEditView } from './views/meals.js';
 import { shoppingView } from './views/shopping.js';
+import { importView, feedsView } from './views/calendar-sync.js';
 import { forgetDevice, refreshPush } from './push.js';
 import { useAccount, forgetAccount, flush, onNetChange, net, sharedDevice } from './offline.js';
 import { lockEnabled, showLockScreen, watchBackground } from './lock.js';
@@ -80,8 +81,9 @@ const PRIVATE = {
   '/aufgaben': tasksView, '/aufgabe': taskView, '/aufgabe-bearbeiten': taskEditView,
   '/essen': mealsView, '/gericht': mealView, '/gericht-bearbeiten': mealEditView,
   '/einkauf': shoppingView,
+  '/kalender-import': importView, '/kalender-abos': feedsView,
 };
-const NAV_OF = { '/termin': '/kalender', '/aufgabe': '/aufgaben', '/aufgabe-bearbeiten': '/aufgaben', '/gericht': '/essen', '/gericht-bearbeiten': '/essen' };
+const NAV_OF = { '/termin': '/kalender', '/kalender-import': '/kalender', '/kalender-abos': '/kalender', '/aufgabe': '/aufgaben', '/aufgabe-bearbeiten': '/aufgaben', '/gericht': '/essen', '/gericht-bearbeiten': '/essen' };
 
 function parseHash() {
   const raw = location.hash.replace(/^#/, '') || '/';

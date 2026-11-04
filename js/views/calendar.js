@@ -7,6 +7,7 @@ import {
 } from '../dates.js';
 import { expandAll, onDay } from '../recur.js';
 import { agendaItem, colorsFor, participantIds, FAMILY_COLOR } from '../events.js';
+import { calendarMenu } from './calendar-sync.js';
 
 const FILTER_KEY = 'fz-cal-hidden';
 function loadHidden() {
@@ -85,7 +86,8 @@ export async function calendarView({ params }) {
     h('div', { class: 'cal-nav' },
       h('button', { class: 'iconbtn', 'aria-label': 'Zurück', onClick: () => step(-1) }, icon('left')),
       h('button', { class: 'btn ghost small', onClick: () => go(link(view, today)) }, 'Heute'),
-      h('button', { class: 'iconbtn', 'aria-label': 'Weiter', onClick: () => step(1) }, icon('right'))));
+      h('button', { class: 'iconbtn', 'aria-label': 'Weiter', onClick: () => step(1) }, icon('right')),
+      h('button', { class: 'iconbtn', 'aria-label': 'Kalender importieren oder verbinden', onClick: calendarMenu }, icon('link'))));
 
   const seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Ansicht' },
     [['month', 'Monat'], ['week', 'Woche'], ['day', 'Tag']].map(([v, label]) =>

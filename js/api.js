@@ -26,6 +26,9 @@ export function germanError(err) {
   if (msg.includes('rate limit') || msg.includes('too many')) return 'Zu viele Versuche. Bitte kurz warten.';
   if (msg.includes('unable to validate email') || msg.includes('invalid email')) return 'Bitte eine gültige E-Mail-Adresse eingeben.';
   if (msg.includes('kein platz')) return 'Für diese Rolle ist kein Platz mehr frei.';
+  if (msg.includes('ungültiger kalender-link')) return 'Bitte einen gültigen Kalender-Link eingeben (beginnt mit https:// oder webcal://).';
+  if (msg.includes('höchstens 5 externe')) return 'Pro Person sind höchstens 5 externe Kalender möglich.';
+  if (msg.includes('zu viele termine')) return 'Zu viele Termine auf einmal (höchstens 2000). Bitte weniger auswählen.';
   if (msg.includes('konflikt')) return 'Der Eintrag wurde inzwischen von jemand anderem geändert. Bitte neu öffnen und noch einmal versuchen.';
   if (msg.includes('keine berechtigung') || msg.includes('row-level security')) return 'Dafür fehlt dir die Berechtigung.';
   if (msg.includes('nur der ersteller')) return 'Nur wer den Termin erstellt hat, kann die Sichtbarkeit ändern.';
@@ -464,4 +467,29 @@ export function watchShopping(onChange) {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'shopping_items' }, () => onChange())
     .subscribe();
   return () => { sb.removeChannel(channel); };
+}
+
+// ---------- Kalenderimport und externe Kalender (ab Version 1.7) ----------
+export async function importEvents(items, participants, visibility) {
+  return check(await sb.rpc('import_events', { p_items: items, p_participants: participants, p_visibility: visibility }));
+}
+
+export async function listFeeds() {
+  return check(await sb.from('calendar_feeds').select('*').order('created_at', { ascending: true }));
+}
+
+export async function addFeed({ label, provider, url, visibility, assignMe }) {
+  return check(await sb.rpc('add_feed', { p_label: label, p_provider: provider, p_url: url, p_visibility: visibility, p_assign_me: assignMe }));
+}
+
+export async function updateFeed(f) {
+  return check(await sb.rpc('update_feed', { p_id: f.id, p_label: f.label, p_visibility: f.visibility, p_assign_me: f.assign_me, p_paused: f.paused }));
+}
+
+export async function requestFeedSync(id) {
+  return check(await sb.rpc('request_feed_sync', { p_id: id }));
+}
+
+export async function deleteFeed(id) {
+  return check(await sb.rpc('delete_feed', { p_id: id }));
 }

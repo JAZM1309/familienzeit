@@ -4,6 +4,8 @@
 import postgres from 'npm:postgres@3.4.5';
 import { generateVapidKeys, sendPush } from './webpush.js';
 import { dueReminders, toWall, fromWall } from './reminders.js';
+import { icsToEvents } from './ics.js';
+import { planSync, feedErrorText } from './feeds.js';
 
 const SUBJECT = 'https://jazm1309.github.io/Familienzeit/';
 const sql = postgres(Deno.env.get('SUPABASE_DB_URL')!, { prepare: false, max: 1, idle_timeout: 20 });
@@ -107,6 +109,101 @@ async function sendPending(vapid: Vapid): Promise<{ sent: number; failed: number
   return { sent, failed };
 }
 
+// ---------- Externe Kalender: pro Aufruf höchstens ein Abo abgleichen ----------
+const MAX_ICS = 5 * 1024 * 1024;
+
+async function fetchIcs(url: string): Promise<string> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 20000);
+  try {
+    const res = await fetch(url, { headers: { 'User-Agent': 'Familienzeit-Kalender/1.0', Accept: 'text/calendar, */*' }, signal: ctrl.signal, redirect: 'follow' });
+    if (!res.ok) throw new Error(feedErrorText(res.status));
+    const len = Number(res.headers.get('content-length') || 0);
+    if (len > MAX_ICS) throw new Error('Der Kalender ist zu groß (über 5 MB).');
+    const text = await res.text();
+    if (text.length > MAX_ICS) throw new Error('Der Kalender ist zu groß (über 5 MB).');
+    if (!/BEGIN:VCALENDAR/i.test(text)) throw new Error('Unter dem Link liegt kein Kalender. Bitte den Link prüfen (er endet meist auf .ics).');
+    return text;
+  } catch (e) {
+    if ((e as Error).name === 'AbortError') throw new Error('Der Kalender-Anbieter antwortet nicht. Es wird später erneut versucht.');
+    if ((e as Error).message?.startsWith('Der ') || (e as Error).message?.startsWith('Unter ')) throw e;
+    throw new Error('Der Kalender konnte nicht abgerufen werden. Es wird später erneut versucht.');
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function syncOneFeed(): Promise<string | null> {
+  const [f] = await sql`
+    select f.id, f.family_id, f.user_id, f.visibility, f.assign_me, u.url
+    from public.calendar_feeds f join public.calendar_feed_urls u on u.feed_id = f.id
+    where not f.paused
+      and (f.sync_requested or f.last_sync_at is null
+           or f.last_sync_at < now() - case when f.fail_count >= 5 then interval '3 hours' else interval '30 minutes' end)
+    order by f.sync_requested desc, f.last_sync_at nulls first
+    limit 1`;
+  if (!f) return null;
+  await sql`update public.calendar_feeds set sync_requested = false, last_sync_at = now() where id = ${f.id}`;
+
+  let items;
+  try {
+    const text = await fetchIcs(f.url);
+    const now = Date.now();
+    items = icsToEvents(text, { from: new Date(now - 60 * 86400000), to: new Date(now + 2 * 365 * 86400000) }).events.slice(0, 3000);
+  } catch (e) {
+    const msg = String((e as Error).message || 'Unbekannter Fehler').slice(0, 300);
+    await sql`update public.calendar_feeds set last_error = ${msg}, fail_count = fail_count + 1 where id = ${f.id}`;
+    return 'error';
+  }
+
+  const assign = f.assign_me && f.visibility !== 'private';
+  let total = 0;
+  await sql.begin(async (tx) => {
+    await tx`select set_config('fz.bulk', 'on', true)`;
+    const existing = await tx`
+      select e.id, e.external_uid, e.title, e.description, e.location, e.starts_at, e.ends_at, e.all_day, e.rrule,
+             e.until::text as until, e.visibility,
+             coalesce((select json_agg(x) from public.event_exceptions x where x.event_id = e.id), '[]'::json) as exceptions
+      from public.events e where e.feed_id = ${f.id}`;
+    const plan = planSync(existing, items, f.visibility);
+    total = plan.total;
+
+    const writeExceptions = async (id: string, list: any[]) => {
+      await tx`delete from public.event_exceptions where event_id = ${id}`;
+      for (const x of list) {
+        await tx`insert into public.event_exceptions (event_id, original_start, cancelled, title, description, location, starts_at, ends_at, all_day)
+          values (${id}, ${x.original_start}, ${!!x.cancelled}, ${x.title ?? null}, ${x.description ?? null}, ${x.location ?? null},
+                  ${x.starts_at ?? null}, ${x.ends_at ?? null}, ${x.all_day ?? null})
+          on conflict do nothing`;
+      }
+    };
+
+    for (const n of plan.inserts) {
+      const [row] = await tx`
+        insert into public.events (family_id, owner_id, title, description, location, starts_at, ends_at, all_day,
+                                   visibility, rrule, until, source, feed_id, external_uid)
+        values (${f.family_id}, ${f.user_id}, ${n.title}, ${n.description}, ${n.location}, ${n.starts_at}, ${n.ends_at}, ${n.all_day},
+                ${f.visibility}, ${n.rrule}, ${n.until}, 'feed', ${f.id}, ${n.external_uid})
+        returning id`;
+      if (assign) await tx`insert into public.event_participants (event_id, user_id) values (${row.id}, ${f.user_id}) on conflict do nothing`;
+      if (n.exceptions.length) await writeExceptions(row.id, n.exceptions);
+    }
+    for (const u of plan.updates) {
+      const n = u.item;
+      if (u.main) {
+        await tx`update public.events set title = ${n.title}, description = ${n.description}, location = ${n.location},
+          starts_at = ${n.starts_at}, ends_at = ${n.ends_at}, all_day = ${n.all_day}, rrule = ${n.rrule}, until = ${n.until},
+          visibility = ${f.visibility}
+          where id = ${u.id}`;
+      }
+      if (u.exc) await writeExceptions(u.id, n.exceptions);
+    }
+    if (plan.deletes.length) await tx`delete from public.events where id = any(${plan.deletes}::uuid[])`;
+  });
+  await sql`update public.calendar_feeds set last_error = null, fail_count = 0, event_count = ${total}, last_sync_at = now() where id = ${f.id}`;
+  return 'ok';
+}
+
 async function housekeeping() {
   // gelegentlich aufräumen
   if (Math.random() > 0.02) return;
@@ -126,8 +223,10 @@ Deno.serve(async (req) => {
     const now = new Date();
     const reminders = await createReminders(now) + await createTaskReminders(now);
     const result = await sendPending(vapid);
+    let feed = null;
+    try { feed = await syncOneFeed(); } catch (e) { console.error('feed', e); }
     await housekeeping();
-    return Response.json({ reminders, ...result });
+    return Response.json({ reminders, ...result, feed });
   } catch (e) {
     console.error(e);
     return new Response('error', { status: 500 });
