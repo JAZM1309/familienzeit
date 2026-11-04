@@ -3,6 +3,7 @@ import * as api from '../api.js';
 import { state } from '../app.js';
 import { CATEGORIES, CATEGORY_LABEL, parseItem, suggestCategory, itemLabel } from '../shopping-parse.js';
 import { nameOf } from '../events.js';
+import { swipeable } from '../gestures.js';
 
 const EMOJI = Object.fromEntries(CATEGORIES.map(([k, , e]) => [k, e]));
 let stopWatching = null;
@@ -108,7 +109,18 @@ export async function shoppingView({ params }) {
     }, icon('trash', 18), 'Entfernen'));
   });
 
-  const row = (i) => h('div', { class: 'shop-item' + (i.done ? ' done' : '') },
+  const row = (i) => swipeable(rowEl(i), {
+    right: { label: i.done ? 'Zurück auf die Liste' : 'Abhaken', icon: i.done ? 'repeat' : 'check', tone: 'var(--teal)', run: () => toggle(i) },
+    left: {
+      label: 'Löschen', icon: 'trash', tone: 'var(--danger)',
+      run: async () => {
+        items = items.filter((x) => x !== i); draw();
+        try { await api.deleteShopping(i.id); } catch (e) { toast(api.germanError(e), { type: 'error' }); }
+        refresh();
+      },
+    },
+  });
+  const rowEl = (i) => h('div', { class: 'shop-item' + (i.done ? ' done' : '') },
     h('button', { class: 'task-check', 'aria-pressed': String(i.done), 'aria-label': i.done ? `${itemLabel(i)} wieder auf die Liste` : `${itemLabel(i)} abhaken`, onClick: () => toggle(i) },
       i.done ? icon('check', 16) : null),
     h('button', { class: 'shop-label', onClick: () => editItem(i) },

@@ -5,6 +5,7 @@ import { updateCard } from '../updater.js';
 import { notificationsCard } from '../push.js';
 import { securityCard, defaultsCard } from '../settings.js';
 import { backupCard } from '../backup.js';
+import { gesturesEnabled, setGesturesEnabled } from '../gestures.js';
 import { APP_VERSION } from '../config.js';
 
 const COLORS = ['#27A99A', '#E9A34A', '#5B7FDB', '#C9567A', '#8A63D2', '#3F9C4F', '#D9604C', '#2F8FB8', '#B08A2E', '#6B7A8F'];
@@ -155,8 +156,14 @@ function displayCard() {
     h('div', { class: 'card-head' }, h('h3', null, 'Darstellung')),
     h('div', { class: 'field' }, h('label', null, 'Farbschema'),
       seg([['auto', 'Automatisch'], ['light', 'Hell'], ['dark', 'Dunkel']], settings.theme || 'auto', (v) => update({ theme: v }))),
-    h('div', { class: 'field', style: { marginBottom: 0 } }, h('label', null, 'Schriftgröße'),
-      seg([['s', 'Klein'], ['m', 'Normal'], ['l', 'Groß']], settings.fontSize || 'm', (v) => update({ fontSize: v }))));
+    h('div', { class: 'field' }, h('label', null, 'Schriftgröße'),
+      seg([['s', 'Klein'], ['m', 'Normal'], ['l', 'Groß']], settings.fontSize || 'm', (v) => update({ fontSize: v }))),
+    h('div', { class: 'switch-row', style: { marginBottom: '2px' } }, h('span', null, 'Wischgesten'),
+      h('label', { class: 'toggle' }, h('input', {
+        type: 'checkbox', checked: gesturesEnabled(), 'aria-label': 'Wischgesten',
+        onChange: (e) => { setGesturesEnabled(e.target.checked); toast(e.target.checked ? 'Wischgesten eingeschaltet.' : 'Wischgesten ausgeschaltet.'); },
+      }), h('span'))),
+    h('p', { class: 'hint', style: { margin: 0 } }, 'Zur Seite wischen wechselt die Rubrik, im Kalender wird geblättert. Nach unten ziehen aktualisiert. Gilt für dieses Gerät.'));
 }
 
 function passwordCard() {

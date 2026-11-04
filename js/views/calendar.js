@@ -8,6 +8,7 @@ import {
 import { expandAll, onDay } from '../recur.js';
 import { agendaItem, colorsFor, participantIds, FAMILY_COLOR } from '../events.js';
 import { calendarMenu } from './calendar-sync.js';
+import { setPageSwipe } from '../gestures.js';
 
 const FILTER_KEY = 'fz-cal-hidden';
 function loadHidden() {
@@ -79,6 +80,8 @@ export async function calendarView({ params }) {
     const next = view === 'month' ? addMonths(day, dir) : addDays(day, dir * (view === 'week' ? 7 : 1));
     go(link(view, next));
   };
+  // Im Kalender blättert Wischen durch Monate, Wochen bzw. Tage
+  setPageSwipe({ left: () => step(1), right: () => step(-1) });
 
   // Kopf: Titel, Blättern, Heute, Ansicht
   const head = h('div', { class: 'cal-head' },

@@ -14,6 +14,7 @@ import { importView, feedsView } from './views/calendar-sync.js';
 import { forgetDevice, refreshPush } from './push.js';
 import { useAccount, forgetAccount, flush, onNetChange, net, sharedDevice } from './offline.js';
 import { lockEnabled, showLockScreen, watchBackground } from './lock.js';
+import { initGestures, setPageSwipe, takeEnter } from './gestures.js';
 
 const root = document.getElementById('app');
 
@@ -123,10 +124,25 @@ export async function render() {
 
   if (params.get('n')) api.markRead([Number(params.get('n'))]).then(refreshUnread).catch(() => {});
   const view = PRIVATE[path] || homeView;
+  setPageSwipe(defaultSwipe(path in PRIVATE ? path : '/'));
   const content = await view({ params });
   if (seq !== renderSeq) return;
   root.replaceChildren(shell(NAV_OF[path] || (path in PRIVATE ? path : '/'), content));
   window.scrollTo(0, 0);
+}
+
+// Hauptrubriken in der Reihenfolge der unteren Leiste
+const SECTIONS = ['/', '/kalender', '/aufgaben', '/essen', '/einkauf'];
+function defaultSwipe(path) {
+  const i = SECTIONS.indexOf(path);
+  if (i >= 0) {
+    return {
+      left: i < SECTIONS.length - 1 ? () => go(SECTIONS[i + 1]) : null,
+      right: i > 0 ? () => go(SECTIONS[i - 1]) : null,
+    };
+  }
+  // Unterseiten: nach rechts wischen = zurück
+  return { left: null, right: () => (history.length > 1 ? history.back() : go(NAV_OF[path] || '/')) };
 }
 
 function shell(path, content) {
@@ -154,7 +170,9 @@ function shell(path, content) {
     nav('/essen', 'meal', 'Essen'),
     nav('/einkauf', 'cart', 'Einkauf')));
 
-  return h('div', null, top, netBanner(), h('main', { class: 'wrap with-nav' }, content), bottom);
+  const enter = takeEnter();
+  const main = h('main', { class: 'wrap with-nav' + (enter ? ` enter-${enter}` : '') }, content);
+  return h('div', null, top, netBanner(), main, bottom);
 }
 
 // Hinweis bei fehlender Verbindung bzw. wartenden Änderungen
@@ -224,6 +242,7 @@ async function boot() {
   });
 
   window.addEventListener('hashchange', render);
+  initGestures({ refresh: () => (state.session ? loadData().then(render) : render()) });
   window.addEventListener('online', () => { syncNow().then(render); });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && state.session) syncNow(); });
   watchBackground(() => state.me, (u) => showLockScreen(u.user_id, u.display_name, logout));

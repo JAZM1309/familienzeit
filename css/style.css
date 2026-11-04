@@ -510,3 +510,33 @@ main { overflow-x: clip; }
 .usage { margin-bottom: 12px; }
 .usage-head { display: flex; justify-content: space-between; gap: 8px; font-size: .92rem; flex-wrap: wrap; }
 .warn-card { border: 2px solid var(--orange); }
+
+/* =================== Version 1.8.2: Wischgesten =================== */
+html, body { overscroll-behavior-y: contain; }
+main { touch-action: pan-y pinch-zoom; }
+.swipe-wrap { position: relative; overflow: hidden; border-radius: 12px; }
+.swipe-row { position: relative; z-index: 1; background: var(--card); will-change: transform; }
+.ev-list .swipe-row, .task.swipe-row { background: var(--card); }
+.swipe-bg { position: absolute; inset: 0; display: none; align-items: center; gap: 8px; padding: 0 18px; color: #fff; font-weight: 700; font-size: .9rem; }
+.swipe-bg.right { justify-content: flex-start; }
+.swipe-bg.left { justify-content: flex-end; }
+.swipe-wrap.show-right .swipe-bg.right, .swipe-wrap.show-left .swipe-bg.left { display: flex; }
+.swipe-wrap + .swipe-wrap .shop-item, .shop-head + .swipe-wrap .shop-item { border-top: 0; }
+.shop-group .swipe-wrap { border-top: 1px solid var(--line); border-radius: 0; }
+.shop-group .shop-head + .swipe-wrap { border-top: 0; }
+.shop-group .swipe-wrap .shop-item { border-top: 0; }
+.task-list-wrap .swipe-wrap, section .swipe-wrap:has(.task) { border-radius: 0; border-bottom: 1px solid var(--line); }
+section .swipe-wrap:has(.task):last-child { border-bottom: 0; }
+.swipe-wrap .task { border-bottom: 0; }
+
+.ptr { position: fixed; left: 50%; top: calc(48px + env(safe-area-inset-top)); z-index: 40; width: 40px; height: 40px; border-radius: 50%;
+  background: var(--card); box-shadow: var(--shadow); display: grid; place-items: center; color: var(--muted); opacity: 0;
+  transform: translate(-50%, 0); pointer-events: none; }
+.ptr.ready { color: var(--teal); }
+.ptr.spin svg { animation: spin .7s linear infinite; }
+
+main.enter-right { animation: enterRight .2s ease both; }
+main.enter-left { animation: enterLeft .2s ease both; }
+@keyframes enterRight { from { transform: translateX(32px); opacity: 0; } }
+@keyframes enterLeft { from { transform: translateX(-32px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { main.enter-right, main.enter-left { animation: none; } }

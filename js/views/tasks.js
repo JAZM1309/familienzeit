@@ -5,6 +5,7 @@ import { startOfDay, addDays, toDateInput, toTimeInput, fromInputs, fromDateInpu
 import { reminderText, nameOf } from '../events.js';
 import { commentsBlock, attachmentsBlock } from '../comments.js';
 import { defaultReminders } from '../settings.js';
+import { swipeable } from '../gestures.js';
 
 const PRIORITY = { low: 'Niedrig', normal: 'Normal', high: 'Hoch' };
 const STATUS = { open: 'Offen', in_progress: 'In Bearbeitung', done: 'Erledigt' };
@@ -38,6 +39,14 @@ async function toggleDone(t, onChange) {
 }
 
 export function taskItem(t, onChange) {
+  const el = taskRow(t, onChange);
+  if (!canEditTask(t)) return el;
+  return swipeable(el, {
+    right: { label: t.status === 'done' ? 'Wieder öffnen' : 'Erledigt', icon: t.status === 'done' ? 'repeat' : 'check', tone: 'var(--teal)', run: () => toggleDone(t, onChange) },
+  });
+}
+
+function taskRow(t, onChange) {
   const due = dueInfo(t);
   const people = state.members.filter((m) => assigneeIds(t).includes(m.user_id));
   const done = t.status === 'done';
