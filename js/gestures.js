@@ -20,6 +20,13 @@ const buzz = () => { try { navigator.vibrate?.(8); } catch { /* egal */ } };
 let page = null;
 export function setPageSwipe(handlers) { page = handlers; }
 
+// Bereich mit eigenen Wisch-Aktionen (z. B. Kalenderblatt: blättern statt Rubrik wechseln)
+export function swipeZone(el, handlers) {
+  el.dataset.swipeZone = '1';
+  el._swipeZone = handlers;
+  return el;
+}
+
 // Richtung, aus der die nächste Seite hereingleitet
 let enter = null;
 export function takeEnter() { const e = enter; enter = null; return e; }
@@ -76,8 +83,11 @@ export function initGestures({ refresh }) {
     let el = document.querySelector('main');
     if (sheetEl) { mode = 'sheet'; el = sheetEl; }
     else if (!typing && target.closest('[data-swipe]')) { mode = 'row'; el = target.closest('[data-swipe]'); }
+    let handlers = page;
+    const zone = mode === 'page' ? target.closest('[data-swipe-zone]') : null;
+    if (zone) { el = zone; handlers = zone._swipeZone; }
     g = {
-      mode, el, x0: t.clientX, y0: t.clientY, t0: Date.now(), dx: 0, dy: 0, axis: null,
+      mode, el, handlers, x0: t.clientX, y0: t.clientY, t0: Date.now(), dx: 0, dy: 0, axis: null,
       noX: !!typing || hScrollable(target, el) || mode === 'sheet',
       atTop: window.scrollY <= 0, sheetTop: sheetEl ? sheetEl.scrollTop <= 0 : false,
     };
@@ -103,7 +113,7 @@ export function initGestures({ refresh }) {
         g.el.classList.toggle('show-right', g.dx > 0);
         g.el.classList.toggle('show-left', g.dx < 0);
       } else if (g.mode === 'page' && g.el) {
-        const can = (g.dx < 0 && page?.left) || (g.dx > 0 && page?.right);
+        const can = (g.dx < 0 && g.handlers?.left) || (g.dx > 0 && g.handlers?.right);
         const d = can ? g.dx * 0.85 : g.dx * 0.18;
         g.el.style.transition = 'none';
         g.el.style.transform = `translateX(${d}px)`;
@@ -149,7 +159,7 @@ export function initGestures({ refresh }) {
     }
 
     if (cur.axis === 'x' && cur.mode === 'page' && cur.el) {
-      const fn = cur.dx < 0 ? page?.left : page?.right;
+      const fn = cur.dx < 0 ? cur.handlers?.left : cur.handlers?.right;
       if (fn && (Math.abs(cur.dx) > 80 || (fast && Math.abs(cur.dx) > 40))) {
         buzz();
         enter = cur.dx < 0 ? 'right' : 'left';

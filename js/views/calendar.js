@@ -8,7 +8,7 @@ import {
 import { expandAll, onDay } from '../recur.js';
 import { agendaItem, colorsFor, participantIds, FAMILY_COLOR } from '../events.js';
 import { calendarMenu } from './calendar-sync.js';
-import { setPageSwipe } from '../gestures.js';
+import { swipeZone } from '../gestures.js';
 
 const FILTER_KEY = 'fz-cal-hidden';
 function loadHidden() {
@@ -80,8 +80,8 @@ export async function calendarView({ params }) {
     const next = view === 'month' ? addMonths(day, dir) : addDays(day, dir * (view === 'week' ? 7 : 1));
     go(link(view, next));
   };
-  // Im Kalender blättert Wischen durch Monate, Wochen bzw. Tage
-  setPageSwipe({ left: () => step(1), right: () => step(-1) });
+  // Auf dem Kalenderblatt blättert Wischen; darüber (Titel, Ansicht, Filter) wechselt es die Rubrik
+  const flip = (el) => swipeZone(el, { left: () => step(1), right: () => step(-1) });
 
   // Kopf: Titel, Blättern, Heute, Ansicht
   const head = h('div', { class: 'cal-head' },
@@ -139,29 +139,35 @@ export async function calendarView({ params }) {
         grid.append(cell);
       }
       content.replaceChildren(
-        h('section', { class: 'card cal-card' }, grid),
+        flip(h('section', { class: 'card cal-card' }, grid)),
         h('section', { class: 'card' },
           h('div', { class: 'card-head' }, h('h2', null, fmtDayLong(selected)), newEventButton(selected)),
           dayList(selected, list)));
     } else if (view === 'week') {
       const s = startOfWeek(day);
-      content.replaceChildren(h('section', { class: 'card' },
+      content.replaceChildren(flip(h('section', { class: 'card' },
         Array.from({ length: 7 }, (_, i) => {
           const d = addDays(s, i);
           return h('div', { class: 'week-day' + (sameDay(d, today) ? ' today' : '') },
             h('button', { class: 'week-label', onClick: () => go(link('day', d)) },
               h('strong', null, WEEKDAYS_SHORT[i]), ' ', d.getDate() + '.'),
             dayList(d, list, { empty: '–' }));
-        })));
+        }))));
     } else {
-      content.replaceChildren(h('section', { class: 'card' },
+      content.replaceChildren(flip(h('section', { class: 'card' },
         h('div', { class: 'card-head' }, h('h2', null, sameDay(day, today) ? 'Heute' : 'Termine'), newEventButton(day)),
-        dayList(day, list, { empty: 'An diesem Tag sind keine Termine eingetragen.' })));
+        dayList(day, list, { empty: 'An diesem Tag sind keine Termine eingetragen.' }))));
     }
   };
 
   drawFilter();
   drawContent();
+  try {
+    if (matchMedia('(pointer: coarse)').matches && localStorage.getItem('fz-tip-calswipe') !== '1') {
+      localStorage.setItem('fz-tip-calswipe', '1');
+      setTimeout(() => toast('Tipp: Auf dem Kalender wischen blättert. Oberhalb wischen wechselt die Rubrik.', { duration: 6000 }), 600);
+    }
+  } catch { /* egal */ }
 
   return h('div', null,
     head, seg, filter, content,
