@@ -12,6 +12,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Familienzeit">
   <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https://wvvcudtqzoolpwltidxo.supabase.co wss://wvvcudtqzoolpwltidxo.supabase.co https://api.github.com https://cdn.jsdelivr.net; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -22,14 +23,7 @@
     <div class="center-state"><div><div class="spinner"></div>Familienzeit wird geladen …</div></div>
   </div>
   <noscript>Familienzeit braucht JavaScript.</noscript>
-  <script>
-    window.addEventListener('error', function (e) {
-      if (String(e.message || '').indexOf('supabase-lib-missing') === -1) return;
-      document.getElementById('app').innerHTML =
-        '<div class="center-state"><div style="padding:24px">Familienzeit konnte nicht geladen werden.<br>' +
-        'Bitte Internetverbindung prüfen und neu laden.</div></div>';
-    });
-  </script>
+  <script src="js/boot-error.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script type="module" src="js/app.js"></script>
 </body>

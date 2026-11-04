@@ -25,6 +25,7 @@ export function germanError(err) {
   if (msg.includes('same_password') || msg.includes('different from the old')) return 'Das neue Passwort muss sich vom alten unterscheiden.';
   if (msg.includes('rate limit') || msg.includes('too many')) return 'Zu viele Versuche. Bitte kurz warten.';
   if (msg.includes('unable to validate email') || msg.includes('invalid email')) return 'Bitte eine gültige E-Mail-Adresse eingeben.';
+  if (msg.includes('storage-full')) return 'Der Speicher ist fast voll. Neue Fotos und Anhänge sind gesperrt – bitte alte Anhänge löschen.';
   if (msg.includes('kein platz')) return 'Für diese Rolle ist kein Platz mehr frei.';
   if (msg.includes('ungültiger kalender-link')) return 'Bitte einen gültigen Kalender-Link eingeben (beginnt mit https:// oder webcal://).';
   if (msg.includes('höchstens 5 externe')) return 'Pro Person sind höchstens 5 externe Kalender möglich.';
@@ -123,9 +124,9 @@ export function avatarPath(familyId, userId) {
 
 export async function uploadAvatar(familyId, userId, blob) {
   const path = avatarPath(familyId, userId);
-  check(await sb.storage.from(BUCKET).upload(path, blob, {
-    upsert: true, contentType: blob.type, cacheControl: '3600',
-  }));
+  try {
+    check(await sb.storage.from(BUCKET).upload(path, blob, { upsert: true, contentType: blob.type, cacheControl: '3600' }));
+  } catch (e) { throw await explainUploadError(e); }
   return path;
 }
 
@@ -333,7 +334,9 @@ export async function uploadAttachment(target, familyId, userId, blob, fileName)
   const [col, id] = targetCol(target);
   const ext = { 'image/webp': 'webp', 'image/jpeg': 'jpg', 'image/png': 'png', 'application/pdf': 'pdf' }[blob.type];
   const path = `${familyId}/${col === 'event_id' ? 'events' : 'tasks'}/${id}/${crypto.randomUUID()}.${ext}`;
-  check(await sb.storage.from(BUCKET).upload(path, blob, { contentType: blob.type, cacheControl: '3600' }));
+  try {
+    check(await sb.storage.from(BUCKET).upload(path, blob, { contentType: blob.type, cacheControl: '3600' }));
+  } catch (e) { throw await explainUploadError(e); }
   try {
     check(await sb.from('attachments').insert({
       family_id: familyId, [col]: id, storage_path: path, file_name: fileName.slice(0, 200),
@@ -390,7 +393,9 @@ export async function setMealMark(table, mealId, userId, on) {
 
 export async function uploadMealImage(familyId, mealId, blob) {
   const path = `${familyId}/meals/${mealId}/${crypto.randomUUID()}.${blob.type === 'image/webp' ? 'webp' : 'jpg'}`;
-  check(await sb.storage.from(BUCKET).upload(path, blob, { contentType: blob.type, cacheControl: '3600' }));
+  try {
+    check(await sb.storage.from(BUCKET).upload(path, blob, { contentType: blob.type, cacheControl: '3600' }));
+  } catch (e) { throw await explainUploadError(e); }
   return path;
 }
 
@@ -504,4 +509,26 @@ export async function requestFeedSync(id) {
 
 export async function deleteFeed(id) {
   return check(await sb.rpc('delete_feed', { p_id: id }));
+}
+
+// ---------- Speicher und Export (ab Version 1.8) ----------
+export async function usageStats() {
+  const rows = check(await sb.rpc('usage_stats'));
+  return Array.isArray(rows) ? rows[0] : rows;
+}
+
+// Alle Zeilen einer Tabelle in Blöcken zu je 1000 laden
+export async function fetchAll(table, select) {
+  const out = [];
+  for (let from = 0; ; from += 1000) {
+    const rows = check(await sb.from(table).select(select).range(from, from + 999));
+    out.push(...rows);
+    if (rows.length < 1000) return out;
+  }
+}
+
+// Schlägt ein Upload fehl, prüfen, ob der Speicher voll ist
+export async function explainUploadError(e) {
+  try { if ((await usageStats())?.uploads_blocked) return Object.assign(new Error('storage-full'), { cause: e }); } catch { /* egal */ }
+  return e;
 }

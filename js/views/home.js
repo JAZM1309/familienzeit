@@ -8,6 +8,7 @@ import { notificationRow, openNotification } from './notifications.js';
 import { taskItem, assigneeIds } from './tasks.js';
 import { mealCard } from './meals.js';
 import { itemLabel } from '../shopping-parse.js';
+import { usageWarning } from '../backup.js';
 
 // Bereiche der Startseite. "version" = ab wann der Bereich Inhalte zeigt.
 const SECTIONS = {
@@ -245,6 +246,7 @@ export async function homeView() {
         h('p', null, date)),
       h('button', { class: 'iconbtn', 'aria-label': 'Startseite anpassen', onClick: customize }, icon('sliders'))),
     installHint(),
+    await usageWarning(),
     visible.length
       ? visible.map(sectionCard)
       : h('div', { class: 'card muted' }, 'Alle Bereiche sind ausgeblendet. Über das Regler-Symbol oben kannst du sie wieder einblenden.'),

@@ -6,7 +6,7 @@ name: Datenbank aktualisieren
 on:
   push:
     branches: [main]
-    paths: ['supabase/migrations/**']
+    paths: ['supabase/migrations/**', 'supabase/tests/**']
   workflow_dispatch:
 
 concurrency:
@@ -14,7 +14,27 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Erst alle Skripte in einer frischen Test-Datenbank prüfen – nur wenn alle
+  # Sicherheitstests bestehen, wird die echte Datenbank verändert.
+  tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sicherheitstests
+        env:
+          DB_URL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: bash supabase/tests/ausfuehren.sh
+
   migrate:
+    needs: tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

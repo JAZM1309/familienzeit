@@ -1,0 +1,74 @@
+# Wöchentliche, verschlüsselte Sicherung der Datenbank in ein PRIVATES Repository.
+# Benötigte Repository-Secrets:
+#   SUPABASE_DB_URL  – wie bei "Datenbank aktualisieren"
+#   BACKUP_TOKEN     – Fine-grained Token mit "Contents: Read and write" nur für das Sicherungs-Repository
+#   BACKUP_PASSWORD  – frei gewähltes, langes Passwort zum Verschlüsseln (gut aufbewahren!)
+# Optionale Repository-Variable BACKUP_REPO (Standard: JAZM1309/familienzeit-backup)
+name: Datensicherung
+
+on:
+  schedule:
+    - cron: '23 2 * * 0'
+  workflow_dispatch:
+
+concurrency:
+  group: datensicherung
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    env:
+      DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      BACKUP_TOKEN: ${{ secrets.BACKUP_TOKEN }}
+      BACKUP_PASSWORD: ${{ secrets.BACKUP_PASSWORD }}
+      BACKUP_REPO: ${{ vars.BACKUP_REPO || 'JAZM1309/familienzeit-backup' }}
+    steps:
+      - name: Voraussetzungen prüfen
+        run: |
+          missing=""
+          [ -z "$DB_URL" ] && missing="$missing SUPABASE_DB_URL"
+          [ -z "$BACKUP_TOKEN" ] && missing="$missing BACKUP_TOKEN"
+          [ -z "$BACKUP_PASSWORD" ] && missing="$missing BACKUP_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "::error::Es fehlen Secrets:$missing (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+          if [ ${#BACKUP_PASSWORD} -lt 12 ]; then
+            echo "::error::BACKUP_PASSWORD sollte mindestens 12 Zeichen haben."
+            exit 1
+          fi
+
+      - name: Datenbank-Werkzeuge installieren
+        run: |
+          sudo apt-get -qq update
+          sudo apt-get -qq install -y postgresql-common >/dev/null
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y >/dev/null
+          sudo apt-get -qq install -y postgresql-client >/dev/null
+          pg_dump --version
+
+      - name: Sichern und verschlüsseln
+        run: |
+          set -euo pipefail
+          STAMP=$(date -u +%Y-%m-%d)
+          mkdir -p dump
+          pg_dump "$DB_URL" --schema=public --no-owner --no-privileges --format=custom -f dump/familienzeit.dump
+          pg_dump "$DB_URL" --data-only --table=auth.users --table=auth.identities --format=custom -f dump/konten.dump
+          pg_dump "$DB_URL" --data-only --table=storage.objects --format=custom -f dump/dateiliste.dump
+          echo "Familienzeit-Sicherung vom $STAMP. Wiederherstellen mit pg_restore (siehe ANLEITUNG.md)." > dump/LIESMICH.txt
+          tar czf - -C dump . | gpg --batch --yes --pinentry-mode loopback --symmetric --cipher-algo AES256 \
+            --passphrase "$BACKUP_PASSWORD" -o "familienzeit-$STAMP.tar.gz.gpg"
+          ls -lh "familienzeit-$STAMP.tar.gz.gpg"
+          echo "STAMP=$STAMP" >> "$GITHUB_ENV"
+
+      - name: Im privaten Repository ablegen (die letzten 12 bleiben)
+        run: |
+          set -euo pipefail
+          git clone --quiet "https://x-access-token:${BACKUP_TOKEN}@github.com/${BACKUP_REPO}.git" ziel
+          cp "familienzeit-$STAMP.tar.gz.gpg" ziel/
+          cd ziel
+          ls familienzeit-*.tar.gz.gpg | sort | head -n -12 | xargs -r git rm -q
+          git add -A
+          git -c user.name="Familienzeit" -c user.email="noreply@github.com" commit -q -m "Sicherung $STAMP"
+          git push -q origin HEAD:main
+          echo "Sicherung $STAMP abgelegt in $BACKUP_REPO."
