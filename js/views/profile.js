@@ -18,6 +18,7 @@ const AVATAR_GROUPS = [
     '🤖', '👽', '👻', '🎃', '⛄']],
   ['Sport & Hobby', ['⚽', '🏀', '🎾', '🏐', '⚾', '🏓', '🥋', '🛹', '🚴', '🏊', '🎸', '🎹', '🥁', '🎨', '🎮',
     '📚', '🧩', '🎯', '🚀', '🏰']],
+  ['Eishockey & Winter', ['🏒', '🥅', '⛸️', '🏆', '🥇', '🧊', '❄️', '⛷️', '🏂', '🎿', '🛷', '🧤', '🧣', '☃️', '🏔️']],
   ['Natur & Essen', ['🌻', '🌈', '⭐', '🌙', '☀️', '🍀', '🌵', '🍄', '🌊', '🔥',
     '🍓', '🍉', '🍕', '🍩', '🧁']],
 ];
@@ -82,9 +83,13 @@ function avatarCard() {
     }
   });
 
-  const chooseEmoji = () => sheet('Avatar wählen', (close) => h('div', { class: 'emoji-groups' }, AVATAR_GROUPS.map(([label, list]) => [
-    h('h3', { class: 'emoji-head' }, label),
-    h('div', { class: 'emoji-grid' }, list.map((em) => h('button', {
+  const current = me.avatar_path ? null : me.avatar;
+  const chooseEmoji = () => sheet('Avatar wählen', (close) => h('div', { class: 'emoji-groups' }, AVATAR_GROUPS.map(([label, list], gi) => fold({
+    group: 'avatare', key: label, title: label,
+    lead: h('span', { class: 'emoji-lead', 'aria-hidden': 'true' }, list.includes(current) ? current : list[0]),
+    summary: `${list.length} Avatare` + (list.includes(current) ? ' · dein Avatar' : ''),
+    defaultOpen: current ? list.includes(current) : gi === 0,
+    body: () => h('div', { class: 'emoji-grid' }, list.map((em) => h('button', {
       'aria-label': `Avatar ${em}`, 'aria-pressed': String(me.avatar === em && !me.avatar_path),
       onClick: async () => {
         close();
@@ -94,7 +99,8 @@ function avatarCard() {
           render();
         }
       },
-    }, em)))])));
+    }, em))),
+  }))));
 
   const remove = async () => {
     const ok = await confirmDialog({ title: 'Bild entfernen?', text: 'Statt des Bildes werden deine Initialen angezeigt.', ok: 'Entfernen', danger: true });
