@@ -6,6 +6,7 @@ import { icsToEvents } from '../ics.js';
 import { ruleText } from '../recur.js';
 import { fmtDayShort, fmtTime, fmtDateTime, toDateInput, addDays } from '../dates.js';
 import { VISIBILITY } from '../events.js';
+import { exportSheet } from '../ics-share.js';
 
 const isParent = () => ['admin', 'parent'].includes(state.me.role);
 const visOptions = () => [['family', 'Familie'], ...(isParent() ? [['parents', 'Nur Eltern']] : []), ['private', 'Persönlich']];
@@ -52,13 +53,16 @@ function chip(label, on, onToggle, extra) {
 
 // Auswahl im Kalender: Import oder Verbindungen
 export function calendarMenu() {
-  sheet('Kalender verbinden', (close) => h('div', { class: 'quick-grid', style: { gridTemplateColumns: '1fr' } },
+  sheet('Kalender verbinden und exportieren', (close) => h('div', { class: 'quick-grid', style: { gridTemplateColumns: '1fr' } },
     h('button', { onClick: () => { close(); go('/kalender-import'); } },
       h('span', { class: 'card-icon' }, icon('download', 19)), h('strong', null, 'Kalenderdatei importieren'),
       h('span', { class: 'muted small' }, 'Termine aus einer .ics-Datei einmalig übernehmen, z. B. aus dem Apple-Kalender oder einem Schulkalender.')),
     h('button', { onClick: () => { close(); go('/kalender-abos'); } },
       h('span', { class: 'card-icon' }, icon('link', 19)), h('strong', null, 'Meine Kalender'),
-      h('span', { class: 'muted small' }, 'Google- oder Outlook-Kalender abonnieren, Farben ändern, importierte Kalender verwalten.'))));
+      h('span', { class: 'muted small' }, 'Google- oder Outlook-Kalender abonnieren, Farben ändern, importierte Kalender verwalten.')),
+    h('button', { onClick: () => { close(); exportSheet(); } },
+      h('span', { class: 'card-icon' }, icon('share', 19)), h('strong', null, 'Termine exportieren'),
+      h('span', { class: 'muted small' }, 'Als Kalenderdatei (.ics) für iPhone, Google, Outlook – z. B. alle Termine, die du eingetragen hast.'))));
 }
 
 // ---------- Import ----------

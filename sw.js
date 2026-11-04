@@ -1,6 +1,6 @@
 // Familienzeit Service Worker
 // Bei jeder neuen Version VERSION erhöhen, damit Geräte das Update laden.
-const VERSION = '1.9.1';
+const VERSION = '1.9.2';
 const CACHE = 'familienzeit-' + VERSION;
 const SHELL = [
   './',
@@ -15,6 +15,8 @@ const SHELL = [
   'js/views/home.js',
   'js/home-hero.js',
   'js/restore.js',
+  'js/ics-export.js',
+  'js/ics-share.js',
   'js/views/family.js',
   'js/views/profile.js',
   'js/views/calendar.js',

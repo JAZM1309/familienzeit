@@ -1,5 +1,6 @@
 // Gemeinsame Bausteine für Termine (Kalender, Startseite)
 import { h, icon, avatar, sheet, toast, confirmDialog, choiceDialog, fold } from './dom.js';
+import { shareEvent } from './ics-share.js';
 import * as api from './api.js';
 import { state, urlFor, go } from './app.js';
 import { fmtTime, fmtDayShort, fmtDayLong, fmtDateTime, sameDay, addDays } from './dates.js';
@@ -177,6 +178,8 @@ export function openEvent(occ, onChange) {
           h('button', { class: 'btn', style: { flex: 1 }, onClick: edit }, icon('edit', 18), 'Bearbeiten'),
           h('button', { class: 'btn danger', style: { flex: 1 }, onClick: remove }, icon('trash', 18), 'Löschen'))
         : h('p', { class: 'muted small' }, ev.feed_id ? 'Termine aus externen Kalendern lassen sich hier nicht bearbeiten.' : 'Bearbeiten können der Ersteller und die zugeordneten Personen.'),
+      h('button', { class: 'btn ghost block', style: { marginTop: '10px' }, onClick: () => { close(); shareEvent(ev); } },
+        icon('share', 18), ev.rrule ? 'Serie in Kalender übernehmen (.ics)' : 'In Kalender übernehmen (.ics)'),
       h('div', { style: { height: '14px' } }),
       fold({ group: 'termin-extra', key: 'anhaenge', title: 'Anhänge', icon: 'camera', body: () => attachmentsBlock({ eventId: ev.id }, editable) }),
       fold({ group: 'termin-extra', key: 'kommentare', title: 'Kommentare', icon: 'text', body: () => commentsBlock({ eventId: ev.id }) }));

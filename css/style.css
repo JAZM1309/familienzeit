@@ -640,3 +640,8 @@ main.enter-left { animation: enterLeft .2s ease both; }
 .rs-check > span { display: flex; flex-direction: column; gap: 2px; }
 .notice.warn { background: color-mix(in srgb, var(--orange) 14%, transparent); }
 .notice.warn svg { color: var(--orange); }
+
+/* 1.9.2 – Kalender-Export */
+.ics-count { margin: 14px 0 0; padding: 10px 12px; border-radius: 12px; background: var(--sky); font-weight: 600; font-size: .92rem; }
+.ics-hints { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 8px; }
+.ics-hints p { margin: 6px 0; }
