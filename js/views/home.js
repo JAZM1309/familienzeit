@@ -1,4 +1,4 @@
-import { h, icon, avatar, sheet, toast } from '../dom.js';
+import { h, icon, avatar, sheet, toast, fold } from '../dom.js';
 import * as api from '../api.js';
 import { state, urlFor, go, render } from '../app.js';
 import { startOfDay, addDays, toDateInput } from '../dates.js';
@@ -43,6 +43,17 @@ let openTasks = [];
 let meals = [];
 let shop = [];
 let mealUrls = {};
+
+function sectionSummary(key) {
+  const n = (count, one, many, none) => (count ? (count === 1 ? one : `${count} ${many}`) : none);
+  if (key === 'termine') return n(today.length, '1 Termin heute', 'Termine heute', 'keine Termine heute');
+  if (key === 'aufgaben') return n(openTasks.length, '1 Aufgabe', 'Aufgaben', 'nichts offen');
+  if (key === 'einkauf') return n(shop.length, '1 Artikel', 'Artikel', 'Liste leer');
+  if (key === 'essen') return n(meals.length, '1 Wunsch', 'Wünsche', 'noch keine');
+  if (key === 'meldungen') return n(latest.length, '1 neue', 'neue', 'nichts Neues');
+  if (key === 'familie') return `${state.members.length} von 4`;
+  return '';
+}
 
 function sectionCard(key) {
   const s = SECTIONS[key];
@@ -248,7 +259,10 @@ export async function homeView() {
     installHint(),
     await usageWarning(),
     visible.length
-      ? visible.map(sectionCard)
+      ? visible.map((key, i) => fold({
+        group: 'start', key, title: SECTIONS[key].title, icon: SECTIONS[key].icon,
+        summary: sectionSummary(key), body: sectionCard(key), defaultOpen: i === 0,
+      }))
       : h('div', { class: 'card muted' }, 'Alle Bereiche sind ausgeblendet. Über das Regler-Symbol oben kannst du sie wieder einblenden.'),
     h('button', { class: 'fab', 'aria-label': 'Neuer Eintrag', onClick: quickAdd }, icon('plus', 28)));
 }

@@ -236,3 +236,55 @@ export function choiceDialog({ title, text, choices }) {
 }
 
 export const ROLE_LABEL = { admin: 'Administrator', parent: 'Elternteil', child: 'Kind' };
+
+// ---------- Klappbare Kacheln: pro Gruppe ist immer höchstens eine offen ----------
+const foldKey = (group) => `fz-fold-${group}`;
+function foldOpen(group, fallback) {
+  try { const v = localStorage.getItem(foldKey(group)); return v === null ? fallback : v; } catch { return fallback; }
+}
+function foldRemember(group, key) {
+  try { localStorage.setItem(foldKey(group), key); } catch { /* egal */ }
+}
+
+/**
+ * fold({ group, key, title, icon, summary, body, defaultOpen })
+ * body: Element, Liste von Elementen oder Funktion (wird erst beim ersten Öffnen gebaut)
+ */
+export function fold({ group, key, title, icon: ic, lead, summary = '', body, defaultOpen = false }) {
+  let open = foldOpen(group, defaultOpen ? key : '') === key;
+  let built = false;
+  const sum = h('span', { class: 'fold-sum' }, summary);
+  const chevron = h('span', { class: 'fold-chevron' }, icon('down', 20));
+  const head = h('button', { class: 'fold-head', type: 'button', 'aria-expanded': String(open) },
+    lead || (ic ? h('span', { class: 'card-icon' }, icon(ic, 19)) : null),
+    h('span', { class: 'fold-title' }, h('span', { class: 'fold-name' }, title), sum),
+    chevron);
+  const content = h('div', { class: 'fold-body', hidden: !open });
+  const card = h('section', { class: 'card fold' + (open ? ' open' : ''), 'data-fold-group': group, 'data-fold-key': key }, head, content);
+  const build = () => {
+    if (built) return;
+    built = true;
+    append(content, [typeof body === 'function' ? body() : body]);
+  };
+  const setOpen = (v) => {
+    open = v;
+    head.setAttribute('aria-expanded', String(v));
+    content.hidden = !v;
+    card.classList.toggle('open', v);
+    if (v) build();
+  };
+  card._setOpen = setOpen;
+  head.addEventListener('click', () => {
+    if (open) { setOpen(false); foldRemember(group, ''); return; }
+    for (const other of document.querySelectorAll(`[data-fold-group="${group}"]`)) if (other !== card) other._setOpen?.(false);
+    setOpen(true);
+    foldRemember(group, key);
+    requestAnimationFrame(() => {
+      const r = card.getBoundingClientRect();
+      if (r.top < 64) window.scrollBy({ top: r.top - 72, behavior: 'smooth' });
+    });
+  });
+  if (open) build();
+  card.setSummary = (t) => { sum.textContent = t || ''; };
+  return card;
+}

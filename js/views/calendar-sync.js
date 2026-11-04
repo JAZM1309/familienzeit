@@ -1,5 +1,5 @@
 // Version 1.7: Kalenderdatei importieren und externe Kalender verbinden
-import { h, icon, avatar, sheet, toast, field, busy, confirmDialog } from '../dom.js';
+import { h, icon, avatar, sheet, toast, field, busy, confirmDialog, fold } from '../dom.js';
 import * as api from '../api.js';
 import { state, urlFor, go, render } from '../app.js';
 import { icsToEvents } from '../ics.js';
@@ -366,11 +366,18 @@ export async function feedsView() {
     h('p', { class: 'muted small', style: { margin: '-8px 4px 14px' } },
       'Jeder Kalender hat eine eigene Farbe. Seine Termine erscheinen im Familienkalender in dieser Farbe – für alle, die sie sehen dürfen. Jeder verwaltet hier nur seine eigenen Kalender.'),
     h('div', { class: 'section-title' }, 'Abonniert (Google, Outlook …)'),
-    ...(feeds.length ? feeds.map(card) : [h('div', { class: 'card', style: { textAlign: 'center' } },
+    ...(feeds.length ? feeds.map((f) => fold({
+      group: 'kalender', key: f.id, title: f.label, lead: h('span', { class: 'cal-dot' , style: { background: f.color } }),
+      summary: f.paused ? 'pausiert' : f.last_error ? 'Fehler – bitte ansehen' : `${PROVIDERS[f.provider]?.label || 'Abo'} · ${f.event_count} Termine`,
+      body: card(f),
+    })) : [h('div', { class: 'card', style: { textAlign: 'center' } },
       h('p', { class: 'muted', style: { marginTop: 0 } }, 'Noch kein externer Kalender verbunden. Termine werden etwa alle 30 Minuten übernommen – nur in diese Richtung.'))]),
     feeds.length < 5 ? h('button', { class: 'btn teal block', onClick: addSheet }, icon('plus', 18), 'Kalender verbinden') : null,
     h('div', { class: 'section-title' }, 'Importiert'),
-    ...(imports.length ? imports.map(importCard) : [h('div', { class: 'card', style: { textAlign: 'center' } },
+    ...(imports.length ? imports.map((imp) => fold({
+      group: 'kalender', key: imp.id, title: imp.name, lead: h('span', { class: 'cal-dot', style: { background: imp.color } }),
+      summary: `Importiert · ${imp.event_count} Termine`, body: importCard(imp),
+    })) : [h('div', { class: 'card', style: { textAlign: 'center' } },
       h('p', { class: 'muted', style: { marginTop: 0 } }, 'Noch keine Kalenderdatei importiert.'))]),
     h('button', { class: 'btn ghost block', style: { marginBottom: '14px' }, onClick: () => go('/kalender-import') }, icon('download', 18), 'Kalenderdatei importieren'));
   return root;

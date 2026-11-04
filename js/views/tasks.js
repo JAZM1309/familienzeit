@@ -1,4 +1,4 @@
-import { h, icon, avatar, sheet, toast, field, busy, confirmDialog } from '../dom.js';
+import { h, icon, avatar, sheet, toast, field, busy, confirmDialog, fold } from '../dom.js';
 import * as api from '../api.js';
 import { state, urlFor, go, render } from '../app.js';
 import { startOfDay, addDays, toDateInput, toTimeInput, fromInputs, fromDateInput, fmtDayShort, fmtTime, fmtDateTime, daysBetween } from '../dates.js';
@@ -208,12 +208,9 @@ export async function taskView({ params }) {
           h('button', { class: 'btn', style: { flex: 1 }, onClick: () => go(`/aufgabe-bearbeiten?id=${t.id}`) }, icon('edit', 18), 'Bearbeiten'),
           h('button', { class: 'btn danger', style: { flex: 1 }, onClick: remove }, icon('trash', 18), 'Löschen'))
         : h('p', { class: 'muted small' }, 'Bearbeiten können der Ersteller und die zugewiesenen Personen.')),
-    h('section', { class: 'card' },
-      h('div', { class: 'card-head' }, h('div', { class: 'card-icon' }, icon('camera', 19)), h('h2', null, 'Anhänge')),
-      attachmentsBlock({ taskId: t.id }, editable)),
-    h('section', { class: 'card' },
-      h('div', { class: 'card-head' }, h('div', { class: 'card-icon' }, icon('text', 19)), h('h2', null, 'Kommentare')),
-      commentsBlock({ taskId: t.id })));
+    fold({ group: 'aufgabe-extra', key: 'anhaenge', title: 'Anhänge', icon: 'camera', body: () => attachmentsBlock({ taskId: t.id }, editable) }),
+    fold({ group: 'aufgabe-extra', key: 'kommentare', title: 'Kommentare', icon: 'text', body: () => commentsBlock({ taskId: t.id }),
+      summary: commentCount(t) ? (commentCount(t) === 1 ? '1 Kommentar' : `${commentCount(t)} Kommentare`) : 'noch keine' }));
 }
 
 // ---------- Bearbeiten / Neu ----------

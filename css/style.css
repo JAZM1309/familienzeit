@@ -540,3 +540,25 @@ main.enter-left { animation: enterLeft .2s ease both; }
 @keyframes enterRight { from { transform: translateX(32px); opacity: 0; } }
 @keyframes enterLeft { from { transform: translateX(-32px); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { main.enter-right, main.enter-left { animation: none; } }
+
+/* =================== Version 1.8.5: Klappbare Kacheln =================== */
+.card.fold { padding: 0; overflow: hidden; }
+.fold-head { width: 100%; display: flex; align-items: center; gap: 12px; padding: 14px 16px; border: 0; background: none; cursor: pointer;
+  text-align: left; color: var(--text); font: inherit; }
+.fold-head:hover { background: color-mix(in srgb, var(--sky) 60%, transparent); }
+.fold-head:focus-visible { outline: 3px solid var(--teal); outline-offset: -3px; }
+.fold-title { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.fold-name { font-weight: 700; font-size: 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fold-sum { font-size: .82rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fold-sum:empty { display: none; }
+.fold-chevron { color: var(--muted); display: inline-flex; transition: transform .2s ease; }
+.fold.open .fold-chevron { transform: rotate(180deg); }
+.fold-body { padding: 0 16px 16px; animation: rise .2s ease both; }
+.fold-body[hidden] { display: none; }
+/* Eingebettete Kacheln: ohne eigenen Rahmen, Überschrift steht schon im Kopf */
+.fold-body .card { box-shadow: none; padding: 0; margin: 0; background: transparent; border-radius: 0; animation: none; }
+.fold-body > .card > .card-head:first-child > :is(.card-icon, h2, h3, .cal-dot) { display: none; }
+.fold-body > .card > .card-head:first-child:not(:has(> :not(.card-icon, h2, h3, .cal-dot))) { display: none; }
+.fold-stack > .card + .card { margin-top: 18px; }
+.sheet .card.fold { box-shadow: none; border: 1px solid var(--line); margin-bottom: 10px; }
+@media (prefers-reduced-motion: reduce) { .fold-body { animation: none; } .fold-chevron { transition: none; } }

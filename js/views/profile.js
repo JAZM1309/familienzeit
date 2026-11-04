@@ -1,4 +1,4 @@
-import { h, icon, avatar, sheet, toast, field, passwordInput, busy, confirmDialog, ROLE_LABEL } from '../dom.js';
+import { h, icon, avatar, sheet, toast, field, passwordInput, busy, confirmDialog, fold, ROLE_LABEL } from '../dom.js';
 import * as api from '../api.js';
 import { state, urlFor, render, applyUi, logout, isAdmin } from '../app.js';
 import { updateCard } from '../updater.js';
@@ -200,17 +200,20 @@ function passwordCard() {
 }
 
 export async function profileView() {
+  const settings = state.me.settings || {};
+  const themeText = { auto: 'Automatisch', light: 'Hell', dark: 'Dunkel' }[settings.theme || 'auto'];
+  const fontText = { s: 'klein', m: 'normal', l: 'groß' }[settings.fontSize || 'm'];
+  const f = (key, title, ic, body, summary) => fold({ group: 'profil', key, title, icon: ic, body, summary });
   return h('div', null,
     h('div', { class: 'hello' }, h('div', { class: 'grow' }, h('h1', null, 'Mein Profil'))),
     avatarCard(),
-    nameCard(),
-    colorCard(),
-    displayCard(),
-    notificationsCard(),
-    defaultsCard(),
-    securityCard(),
-    passwordCard(),
-    isAdmin() ? backupCard() : null,
-    isAdmin() ? updateCard() : null,
+    f('name', 'Name und Profilfarbe', 'user', () => h('div', { class: 'fold-stack' }, nameCard(), colorCard()), state.me.display_name),
+    f('darstellung', 'Darstellung', 'sliders', displayCard, `${themeText} · Schrift ${fontText}`),
+    f('meldungen', 'Benachrichtigungen', 'bell', notificationsCard),
+    f('erinnerungen', 'Standard-Erinnerungen', 'clock', defaultsCard),
+    f('sicherheit', 'Sicherheit und Geräte', 'shield', securityCard),
+    f('konto', 'Konto', 'lock', passwordCard, state.me.email),
+    isAdmin() ? f('speicher', 'Speicher und Datensicherung', 'download', backupCard) : null,
+    isAdmin() ? f('update', 'App-Update', 'download', updateCard, `installiert: ${APP_VERSION}`) : null,
     h('p', { class: 'version' }, `Familienzeit ${APP_VERSION}`));
 }
