@@ -259,5 +259,26 @@ select public.revoke_session('22222222-2222-2222-2222-222222222222');
 reset role;
 select t.ok((select count(*) = 2 from auth.sessions), 'Fremdes Gerät lässt sich nicht abmelden');
 
+\echo '== Passwort zurücksetzen'
+select t.als(t.id('C'));
+select t.fails($$select public.create_password_reset(t.id('D'))$$, 'Kind erstellt Passwort-Link');
+select t.ok(t.n('select id from public.password_resets') = 0, 'Kind sieht keine Passwort-Links');
+select t.fails($$select public.consume_password_reset('x')$$, 'Kind löst Passwort-Link direkt ein');
+reset role;
+select t.als(t.id('A'));
+select t.fails($$select public.create_password_reset(auth.uid())$$, 'Admin erstellt Link für sich selbst');
+select t.merke('reset1', (select token from public.create_password_reset(t.id('C'))));
+select t.merke('reset2', (select token from public.create_password_reset(t.id('C'))));
+select t.fails($$select token_hash from public.password_resets$$, 'Admin liest gespeicherte Link-Codes');
+reset role;
+select t.als(null);
+select t.ok((select valid from public.check_password_reset(t.v('reset1'))) = false, 'Älterer Link wird durch neuen ungültig');
+select t.ok((select display_name from public.check_password_reset(t.v('reset2'))) = 'Kind1', 'Gültiger Link zeigt nur den Vornamen');
+select t.ok((select valid from public.check_password_reset('falsch')) = false, 'Falscher Code ist ungültig');
+select t.fails($$select * from public.password_resets$$, 'Gast liest Passwort-Links');
+reset role;
+select t.ok((select user_id from public.consume_password_reset(t.v('reset2'))) = t.id('C'), 'Server-Funktion löst Link ein');
+select t.ok((select user_id from public.consume_password_reset(t.v('reset2'))) is null, 'Link funktioniert nur einmal');
+
 \echo ''
 \echo '✓ Alle Sicherheitstests bestanden.'

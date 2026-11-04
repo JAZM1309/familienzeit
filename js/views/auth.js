@@ -1,4 +1,4 @@
-import { h, icon, field, passwordInput, busy } from '../dom.js';
+import { h, icon, field, passwordInput, busy, toast } from '../dom.js';
 import * as api from '../api.js';
 import { state, afterLogin, go, logout } from '../app.js';
 
@@ -72,7 +72,7 @@ export async function loginView() {
     h('div', { class: 'card' }, form),
     h('p', { class: 'below' }, open
       ? h('span', null, 'Noch keine Familie angelegt? ', h('a', { href: '#/gruenden' }, 'Familie gründen'))
-      : 'Passwort vergessen? Bitte wende dich an den Administrator deiner Familie.'));
+      : 'Passwort vergessen? Der Administrator deiner Familie kann dir einen Link zum Zurücksetzen schicken.'));
 }
 
 // ---------- Familie gründen (nur beim allerersten Start) ----------
@@ -196,4 +196,50 @@ export async function inviteView({ params }) {
       h('div', { class: 'notice' }, icon('users', 20),
         h('span', null, 'Du trittst ', h('strong', null, inv.family_name), ' ', roleText, ' bei. Der Link gilt bis ', until, ' Uhr.')),
       form));
+}
+
+// ---------- Neues Passwort über Link vom Administrator ----------
+export async function resetView({ params }) {
+  const token = params.get('t') || '';
+  let info = null;
+  let loadError = null;
+  try { info = token ? await api.checkPasswordReset(token) : null; } catch (e) { loadError = api.germanError(e); }
+
+  if (!info?.valid) {
+    return frame(h('div', { class: 'card', style: { marginTop: '20px' } },
+      h('div', { class: 'card-head' }, h('div', { class: 'card-icon' }, icon('info')), h('h2', null, 'Link nicht gültig')),
+      h('p', { class: 'muted' }, loadError || 'Dieser Link ist abgelaufen, wurde schon benutzt oder zurückgezogen. Bitte den Administrator um einen neuen.'),
+      h('a', { class: 'btn ghost block', href: '#/anmelden' }, 'Zur Anmeldung')));
+  }
+
+  const err = errorBox();
+  const pw = passwordInput({ autocomplete: 'new-password' });
+  const pw2 = passwordInput({ autocomplete: 'new-password' });
+  const submit = h('button', { class: 'btn teal block', type: 'submit' }, 'Passwort speichern');
+  const form = h('form', {
+    onSubmit: async (e) => {
+      e.preventDefault();
+      err.clear();
+      if (!passwordsOk(pw.input.value, pw2.input.value, err)) return;
+      busy(submit, true, 'Wird gespeichert …');
+      try {
+        await api.setPasswordWithReset(token, pw.input.value);
+        if (state.session) {
+          // Auf diesem Gerät ist schon jemand angemeldet (z. B. der Administrator beim Testen): angemeldet bleiben
+          location.hash = '/';
+          setTimeout(() => toast(`Neues Passwort für ${info.display_name} gespeichert.`, { duration: 6000 }), 100);
+        } else {
+          location.hash = '/anmelden';
+          setTimeout(() => toast('Passwort geändert. Bitte jetzt mit dem neuen Passwort anmelden.', { duration: 6000 }), 100);
+        }
+      } catch (ex) {
+        err.show(ex.user ? ex.message : api.germanError(ex));
+        busy(submit, false);
+      }
+    },
+  }, err, field('Neues Passwort', pw, 'Mindestens 8 Zeichen.'), field('Passwort wiederholen', pw2), submit);
+
+  return frame(
+    h('p', { class: 'tagline' }, `Hallo ${info.display_name}, lege ein neues Passwort fest.`),
+    h('div', { class: 'card' }, form));
 }

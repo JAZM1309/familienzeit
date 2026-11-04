@@ -1,6 +1,7 @@
 // Alle Zugriffe auf Supabase. Die Rechte prüft die Datenbank (RLS),
 // diese Datei ruft nur auf.
 import { SUPABASE_URL, SUPABASE_KEY } from './config.js';
+export { SUPABASE_URL };
 import { cached, cacheGet, cacheSet, enqueue, isNetworkError, registerHandler } from './offline.js';
 
 if (!window.supabase?.createClient) {
@@ -531,4 +532,37 @@ export async function fetchAll(table, select) {
 export async function explainUploadError(e) {
   try { if ((await usageStats())?.uploads_blocked) return Object.assign(new Error('storage-full'), { cause: e }); } catch { /* egal */ }
   return e;
+}
+
+// ---------- Passwort zurücksetzen (ab Version 1.8.1) ----------
+export async function createPasswordReset(userId) {
+  const rows = check(await sb.rpc('create_password_reset', { p_user: userId }));
+  return Array.isArray(rows) ? rows[0] : rows;
+}
+
+export async function revokePasswordReset(id) {
+  return check(await sb.rpc('revoke_password_reset', { p_id: id }));
+}
+
+export async function openPasswordResets() {
+  return check(await sb.from('password_resets').select('id, user_id, created_at, expires_at')
+    .is('used_at', null).is('revoked_at', null).gt('expires_at', new Date().toISOString()));
+}
+
+export async function checkPasswordReset(token) {
+  const rows = check(await sb.rpc('check_password_reset', { p_token: token }));
+  return Array.isArray(rows) ? rows[0] : rows;
+}
+
+export async function setPasswordWithReset(token, password) {
+  let res;
+  try {
+    res = await fetch(`${SUPABASE_URL}/functions/v1/passwort`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY },
+      body: JSON.stringify({ token, password }),
+    });
+  } catch (e) { throw new Error('failed to fetch'); }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw Object.assign(new Error(body.error || 'Das hat nicht geklappt.'), { user: true });
 }

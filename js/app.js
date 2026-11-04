@@ -1,6 +1,6 @@
 import { h, icon, avatar, toast } from './dom.js';
 import * as api from './api.js';
-import { loginView, foundView, inviteView } from './views/auth.js';
+import { loginView, foundView, inviteView, resetView } from './views/auth.js';
 import { homeView } from './views/home.js';
 import { familyView } from './views/family.js';
 import { profileView } from './views/profile.js';
@@ -74,7 +74,7 @@ export function isAdmin() {
 }
 
 // ---------- Routing ----------
-const PUBLIC = { '/anmelden': loginView, '/gruenden': foundView, '/einladung': inviteView };
+const PUBLIC = { '/anmelden': loginView, '/gruenden': foundView, '/einladung': inviteView, '/passwort-neu': resetView };
 const PRIVATE = {
   '/': homeView, '/kalender': calendarView, '/termin': eventEditView, '/familie': familyView, '/profil': profileView,
   '/meldungen': notificationsView,
