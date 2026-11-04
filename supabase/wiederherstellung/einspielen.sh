@@ -148,7 +148,7 @@ if [ "$MODUS" = "echt" ]; then
   ohne=$(q -c "select count(*) from auth.users u where not exists (select 1 from public.members m where m.user_id = u.id)")
   {
     echo
-    [ "$fehlend" = "0" ] || echo "- ⚠️ **$fehlend** Fotos/Anhänge fehlen im Speicher (Dateien sind nicht Teil der wöchentlichen Sicherung). Sie werden in der App als fehlend angezeigt."
+    [ "$fehlend" = "0" ] || echo "- ⚠️ **$fehlend** Fotos/Anhänge fehlen im Speicher (Dateien sind nicht Teil der wöchentlichen Sicherung). Mit einem ZIP-Export lassen sie sich zurückholen: App → Profil → Speicher und Datensicherung → „Fotos und Anhänge wiederherstellen“."
     [ "$ohne" = "0" ] || echo "- ⚠️ **$ohne** Konto/Konten gehören jetzt zu keiner Familie (z. B. nach der Sicherung neu angemeldet). Diese Personen bitte neu einladen."
     echo "- Bitte die App auf allen Geräten einmal schließen und neu öffnen."
     echo "- Rückgängig machen: diesen Ablauf erneut starten mit Sicherung **rückgängig**."

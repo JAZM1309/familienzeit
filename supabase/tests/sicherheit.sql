@@ -280,5 +280,33 @@ reset role;
 select t.ok((select user_id from public.consume_password_reset(t.v('reset2'))) = t.id('C'), 'Server-Funktion löst Link ein');
 select t.ok((select user_id from public.consume_password_reset(t.v('reset2'))) is null, 'Link funktioniert nur einmal');
 
+\echo '== Dateien wiederherstellen'
+-- Ausgangslage: Datenbank erwartet Dateien, die im Speicher fehlen
+insert into public.meal_wishes (id, family_id, owner_id, title, image_path)
+  select '99999999-0000-0000-0000-000000000001', family_id, t.id('C'), 'Kinderwunsch',
+         family_id || '/meals/99999999-0000-0000-0000-000000000001/bild.webp' from public.members where user_id = t.id('C');
+update public.members set avatar_path = family_id || '/avatars/' || user_id || '.webp' where user_id = t.id('C');
+insert into public.attachments (family_id, event_id, storage_path, file_name, mime, size_bytes, uploaded_by)
+  select family_id, t.id('ev_priv'), family_id || '/events/' || t.v('ev_priv') || '/fehlt.pdf', 'fehlt.pdf', 'application/pdf', 10, t.id('C')
+    from public.members where user_id = t.id('C');
+select t.als(t.id('C'));
+select t.fails($$select * from public.missing_files()$$, 'Kind fragt fehlende Dateien ab');
+select t.fails($$insert into storage.objects (bucket_id, name) values ('familie', public.my_family() || '/avatars/' || t.v('A') || '.webp')$$,
+  'Kind lädt fremdes Profilbild hoch');
+reset role;
+select t.als(t.id('A'));
+select t.ok(t.n($$select * from public.missing_files() where kind in ('essen', 'profil')$$) = 2, 'Admin sieht fehlende Bilder');
+select t.ok(t.n($$select * from public.missing_files() where label = 'fehlt.pdf'$$) = 0, 'Fehlender Anhang eines privaten Termins bleibt unsichtbar');
+insert into storage.objects (bucket_id, name) values ('familie', public.my_family() || '/meals/99999999-0000-0000-0000-000000000001/bild.webp');
+insert into storage.objects (bucket_id, name) values ('familie', public.my_family() || '/avatars/' || t.v('C') || '.webp');
+select t.ok(t.n($$select * from public.missing_files() where kind in ('essen', 'profil')$$) = 0, 'Admin stellt fehlende Bilder wieder her');
+select t.fails($$insert into storage.objects (bucket_id, name) values ('familie', public.my_family() || '/avatars/' || t.v('C') || '.webp')$$,
+  'Vorhandene Datei ein zweites Mal hochladen');
+select t.fails($$insert into storage.objects (bucket_id, name) values ('familie', public.my_family() || '/avatars/' || t.v('D') || '.webp')$$,
+  'Admin lädt nicht erwartete Datei hoch');
+select t.fails(format($$insert into storage.objects (bucket_id, name) values ('familie', public.my_family() || '/events/' || %L || '/fehlt.pdf')$$, t.v('ev_priv')),
+  'Admin lädt Anhang eines privaten Termins hoch');
+reset role;
+
 \echo ''
 \echo '✓ Alle Sicherheitstests bestanden.'

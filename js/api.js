@@ -513,6 +513,17 @@ export async function deleteFeed(id) {
 }
 
 // ---------- Speicher und Export (ab Version 1.8) ----------
+// Wiederherstellung: Dateien, die die Datenbank erwartet, die aber fehlen (nur Admin)
+export async function missingFiles() {
+  return check(await sb.rpc('missing_files')) || [];
+}
+
+export async function restoreFile(path, blob, contentType) {
+  try {
+    check(await sb.storage.from(BUCKET).upload(path, blob, { contentType, cacheControl: '3600', upsert: false }));
+  } catch (e) { throw await explainUploadError(e); }
+}
+
 export async function usageStats() {
   const rows = check(await sb.rpc('usage_stats'));
   return Array.isArray(rows) ? rows[0] : rows;
