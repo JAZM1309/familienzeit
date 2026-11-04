@@ -1,4 +1,5 @@
 import { h, icon, toast, confirmDialog } from '../dom.js';
+import { emptyState } from '../art.js';
 import * as api from '../api.js';
 import { go, refreshUnread } from '../app.js';
 import { fmtTime, fmtDayShort, daysBetween } from '../dates.js';
@@ -64,8 +65,8 @@ export async function notificationsView() {
     const shown = rows.filter((n) => filter === 'alle' || (filter === 'ungelesen' ? !n.read_at : groupOf(n) === filter));
     list.replaceChildren(...(shown.length
       ? shown.map((n) => notificationRow(n, async (x) => { await openNotification(x); x.read_at = x.read_at || new Date().toISOString(); draw(); }))
-      : [h('p', { class: 'muted', style: { textAlign: 'center', padding: '24px 0', margin: 0 } },
-        filter === 'ungelesen' ? 'Alles gelesen.' : 'Noch keine Benachrichtigungen.')]));
+      : [emptyState({ scene: 'glocke', compact: true, title: filter === 'ungelesen' ? 'Alles gelesen' : 'Noch nichts Neues',
+        text: filter === 'ungelesen' ? 'Du bist auf dem neuesten Stand.' : 'Hier erscheinen Hinweise zu Terminen, Aufgaben und mehr.' })]));
   };
   draw();
 

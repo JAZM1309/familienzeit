@@ -55,28 +55,69 @@ function shade(hex) {
   return `rgb(${f(n >> 16)},${f((n >> 8) & 255)},${f(n & 255)})`;
 }
 
-export function heroScene(now = new Date()) {
+// Wetter-Ebenen über dem Himmel
+function weatherLayer(kind, ph) {
+  if (!kind || kind === 'klar') return null;
+  const dark = ph === 'nacht' || ph === 'abend';
+  const cloud = (x, y, k, fill) => s('g', { fill, transform: `translate(${x} ${y}) scale(${k})` },
+    s('ellipse', { cx: 0, cy: 0, rx: 26, ry: 11 }), s('ellipse', { cx: 14, cy: -8, rx: 16, ry: 12 }), s('ellipse', { cx: -12, cy: -5, rx: 12, ry: 9 }));
+  const light = dark ? '#8C9AB5' : '#FFFFFF';
+  const grey = dark ? '#5F6C86' : '#B9C4D2';
+  const out = [];
+  if (kind === 'heiter') out.push(cloud(250, 46, 0.9, light));
+  if (kind === 'wolkig') out.push(cloud(70, 44, 1, light), cloud(262, 50, 1.1, light));
+  if (['bedeckt', 'regen', 'schnee', 'gewitter', 'nebel'].includes(kind)) {
+    const c = kind === 'schnee' ? light : grey;
+    out.push(s('rect', { y: -60, width: 360, height: 220, fill: dark ? '#1A2438' : '#9AA8BA', opacity: kind === 'schnee' ? '.15' : '.32' }),
+      cloud(40, 30, 1.3, c), cloud(150, 22, 1.5, c), cloud(270, 34, 1.4, c), cloud(330, 18, 1.1, c));
+  }
+  if (kind === 'regen' || kind === 'gewitter') {
+    const drops = [];
+    for (let i = 0; i < 34; i++) {
+      const x = (i * 37) % 360 + (i % 3) * 4, y = 46 + ((i * 53) % 90);
+      drops.push(s('path', { d: `M${x} ${y} l-3 9`, class: 'w-drop', style: `animation-delay:${(i % 7) * -0.13}s` }));
+    }
+    out.push(s('g', { stroke: dark ? '#9DB3D6' : '#6F8FB8', 'stroke-width': 1.6, 'stroke-linecap': 'round', opacity: '.8' }, drops));
+  }
+  if (kind === 'gewitter') out.push(s('path', { d: 'M168 40 l-10 22 h9 l-6 18 l18 -26 h-9 l7 -14z', fill: '#FFD34D', class: 'w-flash' }));
+  if (kind === 'schnee') {
+    const flakes = [];
+    for (let i = 0; i < 30; i++) {
+      flakes.push(s('circle', { cx: (i * 41) % 360 + (i % 4) * 3, cy: 40 + ((i * 47) % 100), r: i % 3 ? 1.6 : 2.4, fill: '#FFFFFF', class: 'w-flake', style: `animation-delay:${(i % 9) * -0.4}s` }));
+    }
+    out.push(s('g', null, flakes));
+  }
+  if (kind === 'nebel') out.push(s('g', { fill: '#FFFFFF', opacity: dark ? '.18' : '.55' },
+    s('rect', { x: -10, y: 84, width: 380, height: 10, rx: 5 }), s('rect', { x: 30, y: 102, width: 330, height: 9, rx: 4.5 }), s('rect', { x: -20, y: 120, width: 300, height: 9, rx: 4.5 })));
+  return s('g', { class: 'w-layer' }, out);
+}
+
+export function heroScene(now = new Date(), weather = null) {
   const ph = phaseOf(now);
   const sc = SCENES[ph];
+  const kind = weather?.kind || null;
+  const hideSun = ['bedeckt', 'regen', 'schnee', 'gewitter', 'nebel'].includes(kind);
   const id = 'sky-' + ph;
   const ground = 140;
   const fam = figures();
   const xs = { 1: [224], 2: [214, 240], 3: [204, 230, 254], 4: [196, 222, 248, 270] }[fam.length] || [];
-  const svg = s('svg', { viewBox: '0 0 360 160', preserveAspectRatio: 'xMidYMax slice', class: 'hero-art', 'aria-hidden': 'true' },
+  const top = weather ? -52 : 0; // mit Wetteranzeige etwas mehr Himmel
+  const svg = s('svg', { viewBox: `0 ${top} 360 ${160 - top}`, preserveAspectRatio: 'xMidYMax slice', class: 'hero-art', 'aria-hidden': 'true' },
     s('defs', null, s('linearGradient', { id, x1: 0, y1: 0, x2: 0, y2: 1 },
       s('stop', { offset: '0', 'stop-color': sc.sky[1] }), s('stop', { offset: '1', 'stop-color': sc.sky[0] }))),
-    s('rect', { width: 360, height: 160, fill: `url(#${id})` }),
+    s('rect', { y: top, width: 360, height: 160 - top, fill: `url(#${id})` }),
     ph === 'nacht' ? [[40, 30], [90, 18], [140, 40], [205, 22], [250, 48], [330, 70], [20, 64], [175, 60]]
       .map(([x, y], i) => s('circle', { cx: x, cy: y, r: i % 3 ? 1 : 1.6, fill: '#FFFFFF', opacity: i % 2 ? '.6' : '.9' })) : null,
-    sc.sun ? s('circle', { cx: sc.sun.x, cy: sc.sun.y, r: sc.sun.r, fill: sc.sun.c }) : null,
-    sc.sun ? s('circle', { cx: sc.sun.x, cy: sc.sun.y, r: sc.sun.r + 9, fill: sc.sun.c, opacity: '.18' }) : null,
-    sc.moon ? s('g', null,
+    sc.sun && !hideSun ? s('circle', { cx: sc.sun.x, cy: sc.sun.y, r: sc.sun.r, fill: sc.sun.c }) : null,
+    sc.sun && !hideSun ? s('circle', { cx: sc.sun.x, cy: sc.sun.y, r: sc.sun.r + 9, fill: sc.sun.c, opacity: '.18' }) : null,
+    sc.moon && !hideSun ? s('g', null,
       s('mask', { id: 'moon-cut' },
         s('rect', { width: 360, height: 160, fill: '#fff' }),
         s('circle', { cx: sc.moon.x + 6, cy: sc.moon.y - 4, r: sc.moon.r, fill: '#000' })),
       s('circle', { cx: sc.moon.x, cy: sc.moon.y, r: sc.moon.r, fill: '#F3EBC8', mask: 'url(#moon-cut)' })) : null,
-    ph === 'tag' ? s('g', { fill: '#FFFFFF', opacity: '.9' },
+    ph === 'tag' && !kind ? s('g', { fill: '#FFFFFF', opacity: '.9' },
       s('ellipse', { cx: 92, cy: 40, rx: 22, ry: 9 }), s('ellipse', { cx: 108, cy: 34, rx: 14, ry: 9 })) : null,
+    weatherLayer(kind, ph),
     s('path', { d: 'M0 118 C 60 92, 120 96, 180 112 S 300 96, 360 104 V160 H0z', fill: sc.hill1 }),
     // Haus
     s('g', null,
@@ -91,12 +132,16 @@ export function heroScene(now = new Date()) {
 }
 
 // Kopfkarte mit Begrüßung über der Illustration
-export function heroCard({ title, subtitle, action, now = new Date() }) {
-  const { svg, ink, phase } = heroScene(now);
-  return h('section', { class: `hero hero-${phase}`, style: { color: ink } },
+export function heroCard({ title, subtitle, action, now = new Date(), weather = null }) {
+  const { svg, ink, phase } = heroScene(now, weather);
+  return h('section', { class: `hero hero-${phase}` + (weather ? ` has-weather w-${weather.kind}` : ''), style: { color: ink } },
     svg,
     h('div', { class: 'hero-text' },
-      h('div', { class: 'grow' }, h('h1', null, title), h('p', null, subtitle)),
+      h('div', { class: 'grow' }, h('h1', null, title), h('p', null, subtitle),
+        weather ? h('div', { class: 'hero-weather', title: weather.place || '' },
+          h('span', { class: 'hw-emoji', 'aria-hidden': 'true' }, weather.emoji),
+          h('strong', null, `${weather.temp}°`),
+          h('span', null, `${weather.text}${Number.isFinite(weather.min) ? ` · ${weather.min}° / ${weather.max}°` : ''}`)) : null),
       action));
 }
 

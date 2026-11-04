@@ -1,4 +1,6 @@
 import { h, icon, avatar, toast, sheet } from '../dom.js';
+import { emptyState } from '../art.js';
+import { holidayName } from '../holidays.js';
 import * as api from '../api.js';
 import { state, urlFor, go, render } from '../app.js';
 import {
@@ -53,11 +55,83 @@ function newEventButton(day) {
     icon('plus', 18), 'Termin');
 }
 
-function dayList(day, occs, { empty = 'Keine Termine.' } = {}) {
+function dayList(day, occs, { empty = 'Keine Termine.', art = false } = {}) {
   const items = occs.filter((o) => onDay(o, day));
-  return items.length
-    ? h('div', { class: 'ev-list' }, items.map((o) => agendaItem(o, render)))
+  if (items.length) return h('div', { class: 'ev-list' }, items.map((o) => agendaItem(o, render)));
+  return art
+    ? emptyState({ scene: 'kalender', compact: true, title: 'Freier Tag', text: empty })
     : h('p', { class: 'muted small', style: { margin: '4px 0' } }, empty);
+}
+
+// ---------- Tagesansicht als Zeitleiste ----------
+const HOUR = 52; // Pixel pro Stunde
+function timeline(day, occs, today) {
+  const d0 = startOfDay(day);
+  const d1 = addDays(d0, 1);
+  const items = occs.filter((o) => onDay(o, day));
+  const allDay = items.filter((o) => o.allDay);
+  const timed = items.filter((o) => !o.allDay)
+    .map((o) => {
+      const s0 = Math.max(o.start, d0), e0 = Math.min(Math.max(o.end, o.start.getTime() + 15 * 60000), d1);
+      return { o, top: (s0 - d0) / 3600000 * HOUR, bottom: (e0 - d0) / 3600000 * HOUR };
+    })
+    .sort((a, b) => a.top - b.top || b.bottom - a.bottom);
+
+  // Überschneidungen nebeneinander anordnen
+  let cluster = [], clusterEnd = -1;
+  const flush = () => {
+    const cols = [];
+    for (const it of cluster) {
+      let c = cols.findIndex((end) => end <= it.top + 0.5);
+      if (c < 0) { c = cols.length; cols.push(0); }
+      cols[c] = Math.max(it.bottom, it.top + 22);
+      it.col = c;
+    }
+    for (const it of cluster) it.cols = cols.length;
+    cluster = [];
+  };
+  for (const it of timed) {
+    if (it.top >= clusterEnd) { flush(); clusterEnd = -1; }
+    cluster.push(it);
+    clusterEnd = Math.max(clusterEnd, it.bottom, it.top + 22);
+  }
+  flush();
+
+  const grid = h('div', { class: 'tl-grid', style: { height: 24 * HOUR + 'px' } },
+    Array.from({ length: 24 }, (_, hr) => h('button', {
+      class: 'tl-hour', style: { top: hr * HOUR + 'px', height: HOUR + 'px' }, 'aria-label': `Neuer Termin um ${hr} Uhr`,
+      onClick: () => go(`/termin?datum=${toDateInput(day)}&stunde=${hr}`),
+    }, h('span', null, hr ? `${String(hr).padStart(2, '0')}:00` : ''))),
+    timed.map(({ o, top, bottom, col, cols }) => {
+      const c = colorsFor(o.event)[0];
+      const height = Math.max(bottom - top, 22);
+      return h('button', {
+        class: 'tl-ev' + (height < 40 ? ' short' : ''),
+        style: { top: top + 'px', height: height - 2 + 'px', left: `calc(${(col / cols) * 100}% + 2px)`, width: `calc(${100 / cols}% - 4px)`, '--c': c },
+        onClick: () => openEvent(o, render),
+      },
+      h('strong', null, o.title),
+      h('span', null, `${fmtTime(o.start)}–${fmtTime(o.end)}${o.location ? ' · ' + o.location : ''}`));
+    }));
+  if (sameDay(day, today)) {
+    const now = new Date();
+    grid.append(h('div', { class: 'tl-now', style: { top: (now - d0) / 3600000 * HOUR + 'px' } }));
+  }
+  const first = timed.length ? Math.min(...timed.map((t) => t.top)) : 7 * HOUR;
+  const scrollTo = Math.max(0, Math.min(first, sameDay(day, today) ? (new Date() - d0) / 3600000 * HOUR : first) - HOUR);
+  const hol = holidayName(day);
+
+  const card = h('section', { class: 'card tl-card' },
+    h('div', { class: 'card-head' },
+      h('h2', null, sameDay(day, today) ? 'Heute' : fmtDayLong(day), hol ? h('span', { class: 'hol-tag' }, hol) : null),
+      newEventButton(day)),
+    allDay.length ? h('div', { class: 'tl-allday' }, allDay.map((o) => h('button', {
+      class: 'tl-ad', style: { '--c': colorsFor(o.event)[0] }, onClick: () => openEvent(o, render),
+    }, o.title))) : null,
+    !items.length ? h('p', { class: 'muted small', style: { margin: '0 0 8px' } }, 'Keine Termine – tippe auf eine Uhrzeit, um einen anzulegen.') : null,
+    h('div', { class: 'tl-scroll' }, h('div', { class: 'tl-gutter' }), grid));
+  requestAnimationFrame(() => { const sc = card.querySelector('.tl-scroll'); if (sc) sc.scrollTop = scrollTo; });
+  return card;
 }
 
 // Kurzübersicht beim Antippen eines Tages in der Monatsansicht
@@ -91,7 +165,9 @@ function daySummary(day, occs) {
           sub ? h('span', { class: 'ds-sub' }, sub) : null),
         icon('right', 16));
     };
+    const hol = holidayName(day);
     return h('div', { class: 'day-sum' },
+      hol ? h('p', { class: 'ds-hol' }, h('span', { class: 'hol-tag', style: { marginLeft: 0 } }, hol), ' Feiertag') : null,
       items.length
         ? [h('p', { class: 'ds-meta' }, parts.join(' · ')), h('div', { class: 'ds-list' }, items.map(row))]
         : h('p', { class: 'muted', style: { margin: '4px 0 12px' } }, 'An diesem Tag sind keine Termine eingetragen.'),
@@ -159,11 +235,13 @@ export async function calendarView({ params }) {
       for (let d = new Date(from); d < to; d = addDays(d, 1)) {
         const cellDay = new Date(d);
         const items = list.filter((o) => onDay(o, cellDay));
-        const colors = [...new Set(items.flatMap((o) => colorsFor(o.event)))].slice(0, 4);
+        const hol = holidayName(cellDay);
+        const wd = (cellDay.getDay() + 6) % 7;
         const cell = h('button', {
-          class: 'day' + (cellDay.getMonth() !== day.getMonth() ? ' out' : '') +
+          class: 'day' + (cellDay.getMonth() !== day.getMonth() ? ' out' : '') + (wd >= 5 ? ' we' : '') + (hol ? ' hol' : '') +
             (sameDay(cellDay, today) ? ' today' : '') + (sameDay(cellDay, selected) ? ' sel' : ''),
-          'aria-label': `${fmtDayLong(cellDay)}, ${items.length} Termine`,
+          title: hol || null,
+          'aria-label': `${fmtDayLong(cellDay)}${hol ? ', ' + hol : ''}, ${items.length} Termine`,
           'aria-pressed': String(sameDay(cellDay, selected)),
           onClick: () => {
             selected = cellDay;
@@ -174,7 +252,8 @@ export async function calendarView({ params }) {
           onDblclick: () => go(link('day', cellDay)),
         },
         h('span', { class: 'num' }, cellDay.getDate()),
-        h('span', { class: 'dots' }, colors.map((c) => h('i', { style: { background: c } }))),
+        h('span', { class: 'bars' }, items.slice(0, 3).map((o) => h('i', { style: { background: colorsFor(o.event)[0] } })),
+          items.length > 3 ? h('b', null, `+${items.length - 3}`) : null),
         h('span', { class: 'chips-wide' }, items.slice(0, 2).map((o) =>
           h('span', { class: 'mini', style: { borderColor: colorsFor(o.event)[0] } }, o.title)),
         items.length > 2 ? h('span', { class: 'more' }, `+${items.length - 2}`) : null));
@@ -183,22 +262,22 @@ export async function calendarView({ params }) {
       content.replaceChildren(
         flip(h('section', { class: 'card cal-card' }, grid)),
         h('section', { class: 'card' },
-          h('div', { class: 'card-head' }, h('h2', null, fmtDayLong(selected)), newEventButton(selected)),
-          dayList(selected, list)));
+          h('div', { class: 'card-head' }, h('h2', null, fmtDayLong(selected),
+            holidayName(selected) ? h('span', { class: 'hol-tag' }, holidayName(selected)) : null), newEventButton(selected)),
+          dayList(selected, list, { empty: 'An diesem Tag ist nichts eingetragen.', art: true })));
     } else if (view === 'week') {
       const s = startOfWeek(day);
       content.replaceChildren(flip(h('section', { class: 'card' },
         Array.from({ length: 7 }, (_, i) => {
           const d = addDays(s, i);
           return h('div', { class: 'week-day' + (sameDay(d, today) ? ' today' : '') },
-            h('button', { class: 'week-label', onClick: () => go(link('day', d)) },
-              h('strong', null, WEEKDAYS_SHORT[i]), ' ', d.getDate() + '.'),
+            h('button', { class: 'week-label' + (holidayName(d) ? ' hol' : ''), onClick: () => go(link('day', d)) },
+              h('strong', null, WEEKDAYS_SHORT[i]), ' ', d.getDate() + '.',
+              holidayName(d) ? h('span', { class: 'hol-mini' }, holidayName(d)) : null),
             dayList(d, list, { empty: '–' }));
         }))));
     } else {
-      content.replaceChildren(flip(h('section', { class: 'card' },
-        h('div', { class: 'card-head' }, h('h2', null, sameDay(day, today) ? 'Heute' : 'Termine'), newEventButton(day)),
-        dayList(day, list, { empty: 'An diesem Tag sind keine Termine eingetragen.' }))));
+      content.replaceChildren(flip(timeline(day, list, today)));
     }
   };
 

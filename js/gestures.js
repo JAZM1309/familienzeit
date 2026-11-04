@@ -30,6 +30,9 @@ export function swipeZone(el, handlers) {
 // Richtung, aus der die nächste Seite hereingleitet
 let enter = null;
 export function takeEnter() { const e = enter; enter = null; return e; }
+export function setEnter(dir) { if (!reduceMotion()) enter = dir; }
+// Kurzes Vibrieren bei wichtigen Aktionen (Android; iPhone unterstützt das im Browser nicht)
+export function vibrate(ms = 10) { try { if (!reduceMotion()) navigator.vibrate?.(ms); } catch { /* egal */ } }
 
 // ---------- Listeneinträge ----------
 // actions: { right: { label, icon, tone, run }, left: { ... } }

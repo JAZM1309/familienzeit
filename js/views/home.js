@@ -10,6 +10,7 @@ import { mealCard } from './meals.js';
 import { itemLabel } from '../shopping-parse.js';
 import { usageWarning } from '../backup.js';
 import { heroCard, overviewCard } from '../home-hero.js';
+import { currentWeather } from '../weather.js';
 import { startOfWeek } from '../dates.js';
 
 // Bereiche der Startseite. "version" = ab wann der Bereich Inhalte zeigt.
@@ -256,6 +257,7 @@ export async function homeView() {
   const showArt = true;
   const showOv = true;
   let overview = null;
+  const weatherP = currentWeather(); // parallel laden, höchstens kurz warten
   if (showOv) {
     try {
       const ws = startOfWeek(now);
@@ -269,7 +271,7 @@ export async function homeView() {
 
   return h('div', null,
     showArt
-      ? heroCard({ title, subtitle: date, action: custom, now })
+      ? heroCard({ title, subtitle: date, action: custom, now, weather: await weatherP })
       : h('div', { class: 'hello' },
         h('div', { class: 'grow' }, h('h1', null, title), h('p', null, date)),
         custom),

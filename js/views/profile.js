@@ -8,6 +8,8 @@ import { backupCard } from '../backup.js';
 import { restoreCard } from '../restore.js';
 import { gesturesEnabled, setGesturesEnabled } from '../gestures.js';
 import { APP_VERSION } from '../config.js';
+import { REGIONS, myRegion } from '../holidays.js';
+import { weatherPlace, searchPlaces } from '../weather.js';
 
 const COLORS = ['#27A99A', '#E9A34A', '#5B7FDB', '#C9567A', '#8A63D2', '#3F9C4F', '#D9604C', '#2F8FB8', '#B08A2E', '#6B7A8F'];
 // Vorgegebene Avatare, nach Gruppen
@@ -219,6 +221,68 @@ function passwordCard() {
       }, icon('logout', 18), 'Abmelden')));
 }
 
+// Feiertage (Bundesland) und Wetter-Ort – ohne eigene Wahl gilt die des Administrators
+function placeCard() {
+  const card = h('section', { class: 'card' });
+  const admin = state.members.find((m) => m.user_id === state.family?.admin_id);
+  const iAmAdmin = admin?.user_id === state.me.user_id;
+  const save = async (patch, text) => {
+    const next = { ...(state.me.settings || {}), ...patch };
+    if (await saveMe({ settings: next }, text)) { try { localStorage.removeItem('fz-weather'); } catch { /* egal */ } render(); }
+  };
+  const draw = () => {
+    const own = state.me.settings || {};
+    const sel = h('select', { class: 'input', 'aria-label': 'Bundesland für Feiertage' },
+      ...(!iAmAdmin ? [h('option', { value: '__admin' }, `Wie die Familie (${(REGIONS.find(([k]) => k === (admin?.settings?.region || '')) || REGIONS[0])[1]})`)] : []),
+      ...REGIONS.map(([k, l]) => h('option', { value: k }, l)));
+    sel.value = own.region === undefined || own.region === null ? (iAmAdmin ? '' : '__admin') : own.region;
+    sel.addEventListener('change', () => save({ region: sel.value === '__admin' ? null : sel.value }, 'Feiertage gespeichert.'));
+
+    const place = weatherPlace();
+    const ownWeather = own.weather;
+    const placeText = place
+      ? `${place.name}${ownWeather?.lat == null && !iAmAdmin ? ' (Ort der Familie)' : ''}`
+      : ownWeather === null ? 'Ausgeschaltet' : 'Noch kein Ort gewählt';
+    card.replaceChildren(...[
+      h('div', { class: 'card-head' }, h('h3', null, 'Feiertage und Wetter')),
+      h('div', { class: 'field' }, h('label', null, 'Feiertage im Kalender'), sel,
+        h('div', { class: 'hint' }, iAmAdmin ? 'Gilt auch für alle, die nichts anderes wählen.' : 'Bundesweite Feiertage werden immer angezeigt.')),
+      h('div', { class: 'field', style: { marginBottom: 0 } }, h('label', null, 'Wetter auf der Startseite'),
+        h('div', { class: 'place-row' }, h('span', { class: 'place-name' }, placeText),
+          h('button', { class: 'btn ghost small', onClick: () => pickPlace((p) => save({ weather: p }, `Wetter für ${p.name}.`)) }, place ? 'Ändern' : 'Ort wählen'),
+          place || ownWeather ? h('button', { class: 'btn ghost small', onClick: () => save({ weather: null }, 'Wetter ausgeschaltet.') }, 'Aus') : null,
+          ownWeather === null && !iAmAdmin && admin?.settings?.weather?.lat != null
+            ? h('button', { class: 'btn ghost small', onClick: () => { const n = { ...own }; delete n.weather; saveMe({ settings: n }).then(draw); } }, 'Wie die Familie') : null),
+        h('div', { class: 'hint' }, 'Die Wetterdaten kommen kostenlos von Open-Meteo. Übertragen wird nur der gewählte Ort, nicht dein Standort.')),
+    ].filter(Boolean));
+  };
+  draw();
+  return card;
+}
+
+function pickPlace(onPick) {
+  sheet('Ort für das Wetter', (close) => {
+    const input = h('input', { class: 'input', placeholder: 'z. B. Dortmund', autocomplete: 'off', enterkeyhint: 'search' });
+    const results = h('div', { class: 'place-results' });
+    const go = h('button', { class: 'btn', type: 'submit' }, icon('search', 18), 'Suchen');
+    return h('form', {
+      onSubmit: async (e) => {
+        e.preventDefault();
+        const q = input.value.trim();
+        if (q.length < 2) return;
+        busy(go, true, 'Suche …');
+        try {
+          const list = await searchPlaces(q);
+          results.replaceChildren(...(list.length ? list.map((p) => h('button', {
+            type: 'button', class: 'place-hit', onClick: () => { close(); onPick(p); },
+          }, h('strong', null, p.name), h('span', { class: 'muted small' }, p.region))) : [h('p', { class: 'muted' }, 'Kein Ort gefunden.')]));
+        } catch { results.replaceChildren(h('p', { class: 'error' }, 'Die Suche hat nicht geklappt. Bitte später noch einmal.')); }
+        busy(go, false);
+      },
+    }, h('div', { class: 'place-search' }, input, go), results);
+  });
+}
+
 export async function profileView() {
   const settings = state.me.settings || {};
   const themeText = { auto: 'Automatisch', light: 'Hell', dark: 'Dunkel' }[settings.theme || 'auto'];
@@ -230,6 +294,8 @@ export async function profileView() {
     f('name', 'Name und Profilfarbe', 'user', () => h('div', { class: 'fold-stack' }, nameCard(), colorCard()), state.me.display_name),
     f('darstellung', 'Darstellung', 'sliders', displayCard, `${themeText} · Schrift ${fontText}`),
     f('meldungen', 'Benachrichtigungen', 'bell', notificationsCard),
+    f('ort', 'Feiertage und Wetter', 'calendar', placeCard,
+      [(REGIONS.find(([k]) => k === myRegion()) || REGIONS[0])[1].replace('Nur bundesweite', 'bundesweit'), weatherPlace()?.name].filter(Boolean).join(' · ')),
     f('erinnerungen', 'Standard-Erinnerungen', 'clock', defaultsCard),
     f('sicherheit', 'Sicherheit und Geräte', 'shield', securityCard),
     f('konto', 'Konto', 'lock', passwordCard, state.me.email),

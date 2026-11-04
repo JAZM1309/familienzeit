@@ -1,3 +1,15 @@
+// Leere Einträge (null, undefined, false) nie als Text „null“ einsetzen – gilt für die ganze App
+for (const proto of [Element.prototype, DocumentFragment.prototype]) {
+  for (const name of ['replaceChildren', 'append', 'prepend']) {
+    const orig = proto[name];
+    if (orig && !orig._fz) {
+      const safe = function (...nodes) { return orig.apply(this, nodes.filter((n) => n != null && n !== false)); };
+      safe._fz = true;
+      proto[name] = safe;
+    }
+  }
+}
+
 // Kleine DOM-Helfer. Alle Texte werden als Text eingesetzt, nie als HTML.
 
 export function h(tag, props, ...children) {
@@ -71,6 +83,7 @@ const ICONS = {
   shield: ['M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'],
   heart: ['M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7z'],
   star: ['M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z'],
+  search: ['c:11,11,7', 'M20 20l-4-4'],
   link: ['M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71', 'M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'],
   image: ['r:3,3,18,18,2', 'c:9,9,2', 'm21 15-5-5L5 21'],
   chef: ['M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6z', 'M6 17h12'],
@@ -266,18 +279,28 @@ export function fold({ group, key, title, icon: ic, lead, summary = '', body, de
     built = true;
     append(content, [typeof body === 'function' ? body() : body]);
   };
-  const setOpen = (v) => {
+  const setOpen = (v, animate = false) => {
+    if (open === v) return;
     open = v;
     head.setAttribute('aria-expanded', String(v));
-    content.hidden = !v;
     card.classList.toggle('open', v);
     if (v) build();
+    const smooth = animate && content.animate && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!smooth) { content.hidden = !v; return; }
+    // Weich auf- und zuklappen
+    content.hidden = false;
+    const full = content.scrollHeight;
+    content.style.overflow = 'hidden';
+    const anim = content.animate(
+      v ? [{ height: '0px', opacity: 0 }, { height: full + 'px', opacity: 1 }] : [{ height: full + 'px', opacity: 1 }, { height: '0px', opacity: 0 }],
+      { duration: v ? 260 : 200, easing: 'cubic-bezier(.3,.7,.2,1)' });
+    anim.onfinish = anim.oncancel = () => { content.style.overflow = ''; if (!open) content.hidden = true; };
   };
   card._setOpen = setOpen;
   head.addEventListener('click', () => {
-    if (open) { setOpen(false); foldRemember(group, ''); return; }
-    for (const other of document.querySelectorAll(`[data-fold-group="${group}"]`)) if (other !== card) other._setOpen?.(false);
-    setOpen(true);
+    if (open) { setOpen(false, true); foldRemember(group, ''); return; }
+    for (const other of document.querySelectorAll(`[data-fold-group="${group}"]`)) if (other !== card) other._setOpen?.(false, true);
+    setOpen(true, true);
     foldRemember(group, key);
     requestAnimationFrame(() => {
       const r = card.getBoundingClientRect();

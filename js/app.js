@@ -14,7 +14,7 @@ import { importView, feedsView } from './views/calendar-sync.js';
 import { forgetDevice, refreshPush } from './push.js';
 import { useAccount, forgetAccount, flush, onNetChange, net, sharedDevice } from './offline.js';
 import { lockEnabled, showLockScreen, watchBackground } from './lock.js';
-import { initGestures, setPageSwipe, takeEnter } from './gestures.js';
+import { initGestures, setPageSwipe, takeEnter, setEnter, vibrate } from './gestures.js';
 
 const root = document.getElementById('app');
 
@@ -36,7 +36,9 @@ export function applyUi(settings = {}) {
   if (theme === 'auto') delete r.dataset.theme; else r.dataset.theme = theme;
   if (font === 'm') delete r.dataset.font; else r.dataset.font = font;
   const dark = theme === 'dark' || (theme === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#0E1824' : '#F5F7FA');
+  // Statusleiste: bei fester Wahl beide Einträge auf die gewählte Farbe, sonst je nach System
+  const metas = document.querySelectorAll('meta[name="theme-color"]');
+  metas.forEach((m, i) => m.setAttribute('content', theme === 'auto' ? (i === 0 ? '#F5F7FA' : '#0E1824') : (dark ? '#0E1824' : '#F5F7FA')));
   try { localStorage.setItem(UI_KEY, JSON.stringify({ theme, fontSize: font })); } catch { /* egal */ }
 }
 try { applyUi(JSON.parse(localStorage.getItem(UI_KEY) || '{}')); } catch { applyUi(); }
@@ -125,14 +127,36 @@ export async function render() {
   if (params.get('n')) api.markRead([Number(params.get('n'))]).then(refreshUnread).catch(() => {});
   const view = PRIVATE[path] || homeView;
   setPageSwipe(defaultSwipe(path in PRIVATE ? path : '/'));
-  const content = await view({ params });
+  const navPath = NAV_OF[path] || (path in PRIVATE ? path : '/');
+  // Dauert das Laden spürbar, Platzhalter zeigen statt der alten Seite
+  const slow = setTimeout(() => {
+    if (seq === renderSeq) { root.replaceChildren(shell(navPath, skeleton(navPath))); window.scrollTo(0, 0); }
+  }, 180);
+  let content;
+  try { content = await view({ params }); } finally { clearTimeout(slow); }
   if (seq !== renderSeq) return;
-  root.replaceChildren(shell(NAV_OF[path] || (path in PRIVATE ? path : '/'), content));
+  root.replaceChildren(shell(navPath, content));
   window.scrollTo(0, 0);
+}
+
+// Lade-Platzhalter in Form der kommenden Seite
+function skeleton(path) {
+  const line = (w, cls = '') => h('span', { class: 'sk-line ' + cls, style: { width: w } });
+  const card = (n) => h('div', { class: 'sk-card' }, line('40%', 'strong'), ...Array.from({ length: n }, (_, i) => line(`${88 - i * 14}%`)));
+  if (path === '/kalender') {
+    return h('div', { class: 'sk', 'aria-busy': 'true', 'aria-label': 'Wird geladen' },
+      h('div', { class: 'sk-head' }, line('45%', 'title')),
+      h('div', { class: 'sk-card sk-grid' }, ...Array.from({ length: 35 }, () => h('span', { class: 'sk-cell' }))),
+      card(2));
+  }
+  return h('div', { class: 'sk', 'aria-busy': 'true', 'aria-label': 'Wird geladen' },
+    h('div', { class: 'sk-banner' }, line('50%', 'title'), line('30%')),
+    card(3), card(2), card(3));
 }
 
 // Hauptrubriken in der Reihenfolge der unteren Leiste
 const SECTIONS = ['/', '/kalender', '/aufgaben', '/essen', '/einkauf'];
+const SEC_NAME = { '/': 'start', '/kalender': 'kalender', '/aufgaben': 'aufgaben', '/essen': 'essen', '/einkauf': 'einkauf' };
 function defaultSwipe(path) {
   const i = SECTIONS.indexOf(path);
   if (i >= 0) {
@@ -146,9 +170,17 @@ function defaultSwipe(path) {
 }
 
 function shell(path, content) {
+  const current = SECTIONS.indexOf(path);
+  document.documentElement.dataset.sec = SEC_NAME[path] || 'other';
   const nav = (to, ic, label) => h('button', {
-    class: 'navbtn', 'aria-current': path === to ? 'page' : null, onClick: () => go(to),
-  }, icon(ic, 24), label);
+    class: 'navbtn', 'data-sec': SEC_NAME[to], 'aria-current': path === to ? 'page' : null,
+    onClick: () => {
+      const i = SECTIONS.indexOf(to);
+      if (current >= 0 && i >= 0 && i !== current) setEnter(i > current ? 'right' : 'left');
+      vibrate(8);
+      go(to);
+    },
+  }, h('span', { class: 'nav-ic' }, icon(ic, 23)), label);
 
   const top = h('header', { class: 'topbar' }, h('div', { class: 'wrap' },
     h('div', { class: 'brand' }, h('img', { src: 'icons/icon-192.png', alt: '' }), 'Familienzeit'),

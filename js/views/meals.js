@@ -1,4 +1,5 @@
 import { h, icon, avatar, sheet, toast, field, busy, confirmDialog } from '../dom.js';
+import { banner, emptyState } from '../art.js';
 import * as api from '../api.js';
 import { state, urlFor, go, render } from '../app.js';
 import { fmtDate } from '../dates.js';
@@ -17,9 +18,33 @@ async function imageUrls(meals) {
 }
 const imgOf = (m, urls) => (m.image_path ? urls[m.image_path] : m.image_url) || null;
 
+// Gericht ohne Foto: passendes Emoji auf farbigem Grund
+const DISH = [
+  [/pizza/, '🍕'], [/lasagne|spaghetti|nudel|pasta|makkaroni|tortellini|gnocchi|carbonara|bolognese/, '🍝'],
+  [/suppe|eintopf|brühe|chili/, '🍲'], [/curry|dal|daal/, '🍛'], [/burger/, '🍔'], [/pommes/, '🍟'], [/salat|bowl/, '🥗'],
+  [/pfannkuchen|pancake|crêpe|crepe|waffel/, '🥞'], [/kuchen|torte|muffin/, '🍰'], [/fisch|lachs|thunfisch|fischstäbchen/, '🐟'],
+  [/hähnchen|huhn|hühn|chicken|nugget|schnitzel/, '🍗'], [/reis|risotto|paella/, '🍚'], [/taco|burrito|wrap|fajita|quesadilla/, '🌮'],
+  [/sushi/, '🍣'], [/eis\b|eiscreme/, '🍨'], [/brot|sandwich|toast|stulle/, '🥪'], [/kartoffel|püree|gratin|rösti/, '🥔'],
+  [/steak|braten|rind|gulasch|frikadelle|bulette|hackbraten/, '🥩'], [/wurst|würstchen|bratwurst|hotdog|hot dog/, '🌭'],
+  [/ei\b|eier|omelett|rührei/, '🍳'], [/döner|kebab|gyros/, '🥙'], [/gemüse|brokkoli|auflauf/, '🥦'], [/käse|fondue|raclette|spätzle/, '🧀'],
+  [/obst|frucht|erdbeer/, '🍓'], [/müsli|porridge|haferbrei/, '🥣'], [/dumpling|maultasche|ravioli|knödel|klöße/, '🥟'],
+];
+const TONES = ['#FDE2D4', '#FFEFC2', '#DFF3E4', '#DCEBFB', '#EADFF7', '#FBDDE6', '#D9F2EF', '#F6E7D8'];
+export function dishEmoji(title = '') {
+  const t = title.toLowerCase();
+  return (DISH.find(([re]) => re.test(t)) || [null, '🍽️'])[1];
+}
 function placeholder(m) {
-  const owner = memberById(m.owner_id);
-  return h('div', { class: 'meal-ph', style: { '--c': owner?.color || '#27A99A' } }, icon('meal', 34));
+  const t = m.title || '';
+  let hash = 0;
+  for (const ch of t) hash = (hash * 31 + ch.codePointAt(0)) >>> 0;
+  return h('div', { class: 'meal-ph', style: { '--tone': TONES[hash % TONES.length] } }, h('span', { 'aria-hidden': 'true' }, dishEmoji(t)));
+}
+// Foto, das nicht laden kann, durch den Platzhalter ersetzen
+function photo(m, url, alt = '') {
+  const img = h('img', { src: url, alt, loading: 'lazy', referrerpolicy: 'no-referrer' });
+  img.addEventListener('error', () => img.replaceWith(placeholder(m)), { once: true });
+  return img;
 }
 
 async function toggleMark(table, m, on, onDone) {
@@ -45,13 +70,14 @@ function starButton(m, onDone, big = false) {
   }, icon('star', big ? 20 : 16), big ? (fav ? 'Favorit' : 'Merken') : null);
 }
 
-export function mealCard(m, urls, onChange) {
+export function mealCard(m, urls, onChange, { featured = false } = {}) {
   const url = imgOf(m, urls);
   const owner = memberById(m.owner_id);
-  return h('div', { class: 'meal-card' + (m.cooked ? ' cooked' : '') },
+  return h('div', { class: 'meal-card' + (m.cooked ? ' cooked' : '') + (featured ? ' featured' : '') },
     h('button', { class: 'meal-img', 'aria-label': m.title, onClick: () => go(`/gericht?id=${m.id}`) },
-      url ? h('img', { src: url, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' }) : placeholder(m),
-      m.cooked ? h('span', { class: 'meal-badge' }, icon('check', 12), 'Gekocht') : null),
+      url ? photo(m, url) : placeholder(m),
+      m.cooked ? h('span', { class: 'meal-badge' }, icon('check', 12), 'Gekocht') : null,
+      featured ? h('span', { class: 'meal-badge top' }, icon('heart', 12), 'Beliebtester Wunsch') : null),
     h('div', { class: 'meal-body' },
       h('button', { class: 'meal-title', onClick: () => go(`/gericht?id=${m.id}`) }, m.title),
       h('div', { class: 'meal-foot' },
@@ -82,14 +108,19 @@ export async function mealsView() {
     const empty = { alle: 'Noch keine Essenswünsche. Was möchtest du gern mal essen?', meine: 'Du hast noch nichts gewünscht.',
       favoriten: 'Tippe bei einem Gericht auf den Stern, um es dir zu merken.', gekocht: 'Noch nichts als gekocht markiert.' }[filter];
     grid.replaceChildren(list.length
-      ? h('div', { class: 'meal-grid' }, list.map((m) => mealCard(m, urls, render)))
-      : h('div', { class: 'card', style: { textAlign: 'center' } }, h('p', { class: 'muted', style: { marginTop: 0 } }, empty),
-        h('button', { class: 'btn teal small', onClick: () => go('/gericht-bearbeiten') }, icon('plus', 18), 'Wunsch hinzufügen')));
+      ? h('div', { class: 'meal-grid' }, list.map((m, i) => mealCard(m, urls, render, {
+        featured: i === 0 && filter === 'alle' && !m.cooked && likes(m).length > 0 && list.length > 2,
+      })))
+      : emptyState({ scene: 'essen', title: filter === 'alle' ? 'Noch keine Wünsche' : null, text: empty,
+        action: h('button', { class: 'btn small accent', onClick: () => go('/gericht-bearbeiten') }, icon('plus', 18), 'Wunsch hinzufügen') }));
   };
   draw();
 
   return h('div', null,
-    h('div', { class: 'hello' }, h('div', { class: 'grow' }, h('h1', null, 'Essenswünsche'))),
+    banner({ title: 'Essenswünsche', scene: 'essen', subtitle: (() => {
+      const open = meals.filter((m) => !m.cooked).length;
+      return open ? (open === 1 ? '1 Wunsch offen' : `${open} Wünsche offen`) : 'Was gibt es als Nächstes?';
+    })() }),
     seg, h('div', { style: { height: '12px' } }), grid,
     h('button', { class: 'fab', 'aria-label': 'Neuer Essenswunsch', onClick: () => go('/gericht-bearbeiten') }, icon('plus', 28)));
 }
@@ -147,7 +178,7 @@ export async function mealView({ params }) {
     h('div', { class: 'hello' },
       h('button', { class: 'iconbtn', 'aria-label': 'Zurück', onClick: () => go('/essen') }, icon('back')),
       h('div', { class: 'grow' }, h('h1', { style: { fontSize: '1.35rem' } }, m.title))),
-    h('div', { class: 'meal-hero' }, url ? h('img', { src: url, alt: m.title, referrerpolicy: 'no-referrer' }) : placeholder(m)),
+    h('div', { class: 'meal-hero' }, url ? photo(m, url, m.title) : placeholder(m)),
     h('section', { class: 'card' },
       h('div', { class: 'meal-actions' }, heartButton(m, render, true), starButton(m, render, true)),
       likers.length ? h('p', { class: 'muted small', style: { margin: '10px 0 0' } },

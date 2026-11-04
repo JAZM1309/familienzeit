@@ -1,4 +1,6 @@
 import { h, icon, sheet, toast, field, confirmDialog } from '../dom.js';
+import { tick } from '../fx.js';
+import { banner, emptyState } from '../art.js';
 import * as api from '../api.js';
 import { state } from '../app.js';
 import { CATEGORIES, CATEGORY_LABEL, parseItem, suggestCategory, itemLabel } from '../shopping-parse.js';
@@ -35,6 +37,11 @@ export async function addToShopping(lines) {
   if (rows.length) await api.addShopping(rows);
   return rows.length;
 }
+
+const CAT_COLOR = {
+  obst: '#4FB06D', milch: '#E9B43A', fleisch: '#E06258', brot: '#C98E4E', getraenke: '#3FA0DC',
+  tiefkuehl: '#58B9D9', suess: '#A974C9', haushalt: '#7F93AB', sonstiges: '#8F9AA6',
+};
 
 export async function shoppingView({ params }) {
   stopWatching?.();
@@ -76,7 +83,16 @@ export async function shoppingView({ params }) {
   // ---------- Liste ----------
   const list = h('div');
   const sub = h('p');
-  const toggle = async (i) => {
+  const toggle = async (i, el) => {
+    if (!i.done && el) {
+      // Abhaken: kurz bestätigen und sanft ausblenden, dann wandert der Artikel nach unten
+      tick(el);
+      const row = el.closest('.swipe-wrap') || el.closest('.shop-item');
+      if (row && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        row.classList.add('leaving');
+        await new Promise((r) => setTimeout(r, 320));
+      }
+    }
     i.done = !i.done;
     draw();
     try { await api.updateShopping(i.id, { done: i.done }); } catch (e) { i.done = !i.done; draw(); toast(api.germanError(e), { type: 'error' }); }
@@ -110,7 +126,7 @@ export async function shoppingView({ params }) {
   });
 
   const row = (i) => swipeable(rowEl(i), {
-    right: { label: i.done ? 'Zurück auf die Liste' : 'Abhaken', icon: i.done ? 'repeat' : 'check', tone: 'var(--teal)', run: () => toggle(i) },
+    right: { label: i.done ? 'Zurück auf die Liste' : 'Abhaken', icon: i.done ? 'repeat' : 'check', tone: 'var(--accent)', run: () => toggle(i) },
     left: {
       label: 'Löschen', icon: 'trash', tone: 'var(--danger)',
       run: async () => {
@@ -121,7 +137,7 @@ export async function shoppingView({ params }) {
     },
   });
   const rowEl = (i) => h('div', { class: 'shop-item' + (i.done ? ' done' : '') },
-    h('button', { class: 'task-check', 'aria-pressed': String(i.done), 'aria-label': i.done ? `${itemLabel(i)} wieder auf die Liste` : `${itemLabel(i)} abhaken`, onClick: () => toggle(i) },
+    h('button', { class: 'task-check', 'aria-pressed': String(i.done), 'aria-label': i.done ? `${itemLabel(i)} wieder auf die Liste` : `${itemLabel(i)} abhaken`, onClick: (e) => toggle(i, e.currentTarget) },
       i.done ? icon('check', 16) : null),
     h('button', { class: 'shop-label', onClick: () => editItem(i) },
       h('span', null, i.quantity || i.unit ? h('strong', null, [i.quantity, i.unit].filter(Boolean).join(' ') + ' ') : null, i.name),
@@ -134,21 +150,21 @@ export async function shoppingView({ params }) {
     const groups = CATEGORIES.map(([k, label, e]) => [k, label, e, open.filter((i) => i.category === k)]).filter((g) => g[3].length);
     list.replaceChildren(
       ...(groups.length
-        ? groups.map(([, label, e, rows]) => h('section', { class: 'card shop-group' },
-          h('div', { class: 'shop-head' }, h('span', null, e), h('strong', null, label), h('span', { class: 'muted small' }, String(rows.length))),
+        ? groups.map(([k, label, e, rows]) => h('section', { class: 'card shop-group', style: { '--cat': CAT_COLOR[k] || '#9AA5B1' } },
+          h('div', { class: 'shop-head' }, h('span', { class: 'shop-ic', 'aria-hidden': 'true' }, e), h('strong', null, label), h('span', { class: 'shop-count' }, String(rows.length))),
           rows.map(row)))
-        : [h('div', { class: 'card', style: { textAlign: 'center' } }, h('p', { class: 'muted', style: { margin: 0 } }, 'Die Einkaufsliste ist leer. 🎉'))]),
-      done.length ? h('div', { class: 'shop-done-bar' },
-        h('button', { class: 'link-btn', onClick: () => { showDone = !showDone; saveShowDone(showDone); draw(); } },
-          showDone ? `Erledigte ausblenden (${done.length})` : `Erledigte anzeigen (${done.length})`),
+        : [emptyState({ scene: 'einkauf', title: 'Alles eingekauft!', text: 'Die Einkaufsliste ist leer. Neue Artikel oben eintippen.' })]),
+      done.length ? h('div', { class: 'shop-done-bar' + (showDone ? ' open' : '') },
+        h('button', { class: 'shop-done-toggle', 'aria-expanded': String(showDone), onClick: () => { showDone = !showDone; saveShowDone(showDone); draw(); } },
+          h('span', { class: 'shop-done-ic' }, icon('check', 15)), h('strong', null, `Erledigt (${done.length})`), h('span', { class: 'fold-chevron' }, icon('down', 18))),
         h('button', {
           class: 'link-btn danger-link',
           onClick: async () => {
             if (!(await confirmDialog({ title: 'Erledigte löschen?', text: `${done.length} abgehakte Artikel werden für alle entfernt.`, ok: 'Löschen', danger: true }))) return;
             try { await api.deleteDoneShopping(); refresh(); toast('Erledigte gelöscht.'); } catch (e) { toast(api.germanError(e), { type: 'error' }); }
           },
-        }, 'Erledigte löschen')) : null,
-      done.length && showDone ? h('section', { class: 'card shop-group' }, done.map(row)) : null);
+        }, 'Löschen')) : null,
+      done.length && showDone ? h('section', { class: 'card shop-group shop-done-list' }, done.map(row)) : null);
   }
 
   let pending = null;
@@ -168,7 +184,7 @@ export async function shoppingView({ params }) {
   });
 
   root.append(
-    h('div', { class: 'hello' }, h('div', { class: 'grow' }, h('h1', null, 'Einkaufsliste'), sub)),
+    banner({ title: 'Einkaufsliste', subtitle: sub, scene: 'einkauf' }),
     h('section', { class: 'card' }, form),
     list);
   if (params.get('neu')) setTimeout(() => input.focus(), 50);

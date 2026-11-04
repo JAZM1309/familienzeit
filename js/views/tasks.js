@@ -1,4 +1,6 @@
 import { h, icon, avatar, sheet, toast, field, busy, confirmDialog, fold } from '../dom.js';
+import { celebrate } from '../fx.js';
+import { banner, emptyState } from '../art.js';
 import * as api from '../api.js';
 import { state, urlFor, go, render } from '../app.js';
 import { startOfDay, addDays, toDateInput, toTimeInput, fromInputs, fromDateInput, fmtDayShort, fmtTime, fmtDateTime, daysBetween } from '../dates.js';
@@ -28,12 +30,14 @@ export function dueInfo(t, now = new Date()) {
   return { text: `Fällig ${day}${t.due_all_day ? '' : ', ' + fmtTime(d)}`, overdue, diff };
 }
 
-async function toggleDone(t, onChange) {
+async function toggleDone(t, onChange, el) {
   if (!canEditTask(t)) { toast('Abhaken können der Ersteller und die zugewiesenen Personen.', { type: 'error' }); return; }
   const next = t.status === 'done' ? 'open' : 'done';
+  if (next === 'done') celebrate(el);
   try {
     await api.setTaskStatus(t.id, next);
     toast(next === 'done' ? 'Erledigt.' : 'Wieder offen.');
+    if (next === 'done') await new Promise((r) => setTimeout(r, 450)); // Animation kurz wirken lassen
     onChange?.();
   } catch (e) { toast(api.germanError(e), { type: 'error' }); }
 }
@@ -42,7 +46,7 @@ export function taskItem(t, onChange) {
   const el = taskRow(t, onChange);
   if (!canEditTask(t)) return el;
   return swipeable(el, {
-    right: { label: t.status === 'done' ? 'Wieder öffnen' : 'Erledigt', icon: t.status === 'done' ? 'repeat' : 'check', tone: 'var(--teal)', run: () => toggleDone(t, onChange) },
+    right: { label: t.status === 'done' ? 'Wieder öffnen' : 'Erledigt', icon: t.status === 'done' ? 'repeat' : 'check', tone: 'var(--accent)', run: () => toggleDone(t, onChange, el.querySelector('.task-check')) },
   });
 }
 
@@ -53,7 +57,7 @@ function taskRow(t, onChange) {
   return h('div', { class: 'task' + (done ? ' done' : '') },
     h('button', {
       class: 'task-check', 'aria-label': done ? `${t.title}: wieder öffnen` : `${t.title}: erledigt`, 'aria-pressed': String(done),
-      onClick: () => toggleDone(t, onChange),
+      onClick: (e) => toggleDone(t, onChange, e.currentTarget),
     }, done ? icon('check', 16) : null),
     h('button', { class: 'task-main', onClick: () => go(`/aufgabe?id=${t.id}`) },
       h('span', { class: 'task-title' }, t.title),
@@ -98,6 +102,7 @@ export async function tasksView() {
   const me = state.me.user_id;
   const content = h('div');
   const seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Filter' });
+  const sub = h('span');
 
   const draw = () => {
     seg.replaceChildren(...[['alle', 'Alle'], ['meine', 'Meine'], ['familie', 'Familie'], ['erledigt', 'Erledigt']].map(([v, label]) =>
@@ -107,7 +112,7 @@ export async function tasksView() {
       list = tasks.filter((t) => t.status === 'done').sort((a, b) => new Date(b.done_at) - new Date(a.done_at));
       content.replaceChildren(list.length
         ? h('section', { class: 'card' }, list.slice(0, 100).map((t) => taskItem(t, render)))
-        : h('p', { class: 'muted', style: { textAlign: 'center', padding: '24px' } }, 'Noch nichts erledigt.'));
+        : emptyState({ scene: 'aufgaben', title: 'Noch nichts erledigt', text: 'Abgehakte Aufgaben erscheinen hier.' }));
       return;
     }
     list = tasks.filter((t) => t.status !== 'done');
@@ -118,14 +123,18 @@ export async function tasksView() {
       ? group(list).map(([title, items]) => h('section', { class: 'card' },
         h('div', { class: 'section-title', style: { margin: '0 0 6px' } }, title),
         items.map((t) => taskItem(t, render))))
-      : [h('div', { class: 'card', style: { textAlign: 'center' } },
-        h('p', { class: 'muted', style: { marginTop: 0 } }, filter === 'meine' ? 'Dir ist gerade nichts zugewiesen.' : 'Keine offenen Aufgaben.'),
-        h('button', { class: 'btn teal small', onClick: () => go('/aufgabe-bearbeiten') }, icon('plus', 18), 'Aufgabe anlegen'))]));
+      : [emptyState({
+        scene: 'fertig', title: 'Alles erledigt!',
+        text: filter === 'meine' ? 'Dir ist gerade nichts zugewiesen. Genieß die freie Zeit.' : 'Keine offenen Aufgaben. Zeit für etwas Schönes.',
+        action: h('button', { class: 'btn small accent', onClick: () => go('/aufgabe-bearbeiten') }, icon('plus', 18), 'Aufgabe anlegen'),
+      })]));
+    const n = tasks.filter((t) => t.status !== 'done').length;
+    sub.textContent = n ? (n === 1 ? '1 Aufgabe offen' : `${n} Aufgaben offen`) : 'Alles erledigt';
   };
   draw();
 
   return h('div', null,
-    h('div', { class: 'hello' }, h('div', { class: 'grow' }, h('h1', null, 'Aufgaben'))),
+    banner({ title: 'Aufgaben', subtitle: sub, scene: 'aufgaben' }),
     seg, h('div', { style: { height: '12px' } }), content,
     h('button', { class: 'fab', 'aria-label': 'Neue Aufgabe', onClick: () => go('/aufgabe-bearbeiten') }, icon('plus', 28)));
 }
@@ -168,9 +177,10 @@ export async function taskView({ params }) {
   const statusSeg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Status' },
     Object.entries(STATUS).map(([v, label]) => h('button', {
       'aria-pressed': String(v === t.status), disabled: !editable,
-      onClick: async () => {
+      onClick: async (e) => {
         if (v === t.status) return;
-        try { await api.setTaskStatus(t.id, v); render(); } catch (e) { toast(api.germanError(e), { type: 'error' }); }
+        if (v === 'done' && t.status !== 'done') celebrate(e.currentTarget);
+        try { await api.setTaskStatus(t.id, v); if (v === 'done') await new Promise((r) => setTimeout(r, 450)); render(); } catch (e) { toast(api.germanError(e), { type: 'error' }); }
       },
     }, label)));
 

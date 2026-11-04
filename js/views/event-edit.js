@@ -78,7 +78,9 @@ export async function eventEditView({ params }) {
     const base = params.get('datum') ? fromDateInput(params.get('datum')) : startOfDay(new Date());
     start = new Date(base);
     const now = new Date();
-    if (base.toDateString() === now.toDateString()) start.setHours(now.getHours() + 1, 0, 0, 0);
+    const hour = Number(params.get('stunde'));
+    if (params.get('stunde') && hour >= 0 && hour <= 23) start.setHours(hour, 0, 0, 0); // aus der Zeitleiste angetippt
+    else if (base.toDateString() === now.toDateString()) start.setHours(now.getHours() + 1, 0, 0, 0);
     else start.setHours(9, 0, 0, 0);
     end = new Date(start.getTime() + 3600000);
   }
