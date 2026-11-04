@@ -614,3 +614,9 @@ main.enter-left { animation: enterLeft .2s ease both; }
 .ov-bar.today .ov-col i { background: var(--teal); }
 .ov-bar.today .ov-wd, .ov-bar.today .ov-n { color: var(--teal); font-weight: 700; }
 .ov-wd { font-size: .74rem; color: var(--muted); }
+
+/* 1.8.8 – mehr Avatare */
+.emoji-groups .emoji-head { margin: 18px 0 8px; font-size: .8rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.emoji-groups .emoji-head:first-child { margin-top: 0; }
+.emoji-groups .emoji-grid { grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.emoji-groups .emoji-grid button { font-size: 1.6rem; border-radius: 14px; }

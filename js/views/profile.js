@@ -9,7 +9,19 @@ import { gesturesEnabled, setGesturesEnabled } from '../gestures.js';
 import { APP_VERSION } from '../config.js';
 
 const COLORS = ['#27A99A', '#E9A34A', '#5B7FDB', '#C9567A', '#8A63D2', '#3F9C4F', '#D9604C', '#2F8FB8', '#B08A2E', '#6B7A8F'];
-const EMOJIS = ['🐻', '🦊', '🐼', '🐱', '🐶', '🦁', '🐸', '🐧', '🦄', '🐢', '🐰', '🐨', '🐯', '🦉', '🐙'];
+// Vorgegebene Avatare, nach Gruppen
+const AVATAR_GROUPS = [
+  ['Tiere', ['🐻', '🦊', '🐼', '🐱', '🐶', '🦁', '🐸', '🐧', '🦄', '🐢', '🐰', '🐨', '🐯', '🦉', '🐙',
+    '🐵', '🐷', '🐮', '🐹', '🐭', '🦒', '🦓', '🐘', '🦘', '🦥', '🦦', '🦔', '🐬', '🐳', '🦈',
+    '🦜', '🦩', '🐝', '🦋', '🐞', '🦖', '🐲', '🐴', '🦝', '🐺']],
+  ['Figuren', ['👩‍🚀', '🧑‍🚀', '🧙', '🧚', '🧜', '🦸', '🦹', '🥷', '🧛', '👸', '🤴', '🧑‍🎤', '🧑‍🍳', '🧑‍🔬', '🧑‍🎨',
+    '🤖', '👽', '👻', '🎃', '⛄']],
+  ['Sport & Hobby', ['⚽', '🏀', '🎾', '🏐', '⚾', '🏓', '🥋', '🛹', '🚴', '🏊', '🎸', '🎹', '🥁', '🎨', '🎮',
+    '📚', '🧩', '🎯', '🚀', '🏰']],
+  ['Natur & Essen', ['🌻', '🌈', '⭐', '🌙', '☀️', '🍀', '🌵', '🍄', '🌊', '🔥',
+    '🍓', '🍉', '🍕', '🍩', '🧁']],
+];
+const EMOJIS = AVATAR_GROUPS.flatMap(([, list]) => list);
 
 async function saveMe(patch, okText) {
   try {
@@ -70,8 +82,9 @@ function avatarCard() {
     }
   });
 
-  const chooseEmoji = () => sheet('Avatar wählen', (close) => h('div', { class: 'emoji-grid' },
-    EMOJIS.map((em) => h('button', {
+  const chooseEmoji = () => sheet('Avatar wählen', (close) => h('div', { class: 'emoji-groups' }, AVATAR_GROUPS.map(([label, list]) => [
+    h('h3', { class: 'emoji-head' }, label),
+    h('div', { class: 'emoji-grid' }, list.map((em) => h('button', {
       'aria-label': `Avatar ${em}`, 'aria-pressed': String(me.avatar === em && !me.avatar_path),
       onClick: async () => {
         close();
@@ -81,7 +94,7 @@ function avatarCard() {
           render();
         }
       },
-    }, em))));
+    }, em)))])));
 
   const remove = async () => {
     const ok = await confirmDialog({ title: 'Bild entfernen?', text: 'Statt des Bildes werden deine Initialen angezeigt.', ok: 'Entfernen', danger: true });
