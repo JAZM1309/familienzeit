@@ -10,9 +10,15 @@ on:
   schedule:
     - cron: '23 2 * * 0'
   workflow_dispatch:
+  # Wird auch von „Wiederherstellung“ aufgerufen (Sicherung des Stands davor)
+  workflow_call:
+    inputs:
+      zusatz:
+        type: string
+        default: ''
 
 concurrency:
-  group: datensicherung
+  group: datensicherung-${{ inputs.zusatz || 'woche' }}
   cancel-in-progress: false
 
 jobs:
@@ -23,6 +29,7 @@ jobs:
       BACKUP_TOKEN: ${{ secrets.BACKUP_TOKEN }}
       BACKUP_PASSWORD: ${{ secrets.BACKUP_PASSWORD }}
       BACKUP_REPO: ${{ vars.BACKUP_REPO || 'JAZM1309/familienzeit-backup' }}
+      ZUSATZ: ${{ inputs.zusatz }}
     steps:
       - name: Voraussetzungen prüfen
         run: |
@@ -50,7 +57,13 @@ jobs:
       - name: Sichern und verschlüsseln
         run: |
           set -euo pipefail
-          STAMP=$(date -u +%Y-%m-%d)
+          # Wöchentlich: familienzeit-JJJJ-MM-TT; vor einer Wiederherstellung mit Uhrzeit und Zusatz
+          if [ -n "$ZUSATZ" ]; then
+            case "$ZUSATZ" in *[!a-z-]*) echo "::error::Ungültiger Zusatz"; exit 1;; esac
+            STAMP="$(date -u +%Y-%m-%d-%H%M)-$ZUSATZ"
+          else
+            STAMP=$(date -u +%Y-%m-%d)
+          fi
           mkdir -p dump
           pg_dump "$DB_URL" --schema=public --no-owner --no-privileges --format=custom -f dump/familienzeit.dump
           pg_dump "$DB_URL" --data-only --table=auth.users --table=auth.identities --format=custom -f dump/konten.dump
@@ -61,13 +74,15 @@ jobs:
           ls -lh "familienzeit-$STAMP.tar.gz.gpg"
           echo "STAMP=$STAMP" >> "$GITHUB_ENV"
 
-      - name: Im privaten Repository ablegen (die letzten 12 bleiben)
+      - name: Im privaten Repository ablegen (die letzten 12 Wochen-Sicherungen bleiben)
         run: |
           set -euo pipefail
           git clone --quiet "https://x-access-token:${BACKUP_TOKEN}@github.com/${BACKUP_REPO}.git" ziel
           cp "familienzeit-$STAMP.tar.gz.gpg" ziel/
           cd ziel
-          ls familienzeit-*.tar.gz.gpg | sort | head -n -12 | xargs -r git rm -q
+          { ls | grep -E '^familienzeit-[0-9]{4}-[0-9]{2}-[0-9]{2}\.tar\.gz\.gpg$' || true; } | sort | head -n -12 | xargs -r git rm -q
+          # Stände vor Wiederherstellungen: die letzten 5 bleiben
+          { ls | grep -E '^familienzeit-.*-vor-wiederherstellung\.tar\.gz\.gpg$' || true; } | sort | head -n -5 | xargs -r git rm -q
           git add -A
           git -c user.name="Familienzeit" -c user.email="noreply@github.com" commit -q -m "Sicherung $STAMP"
           git push -q origin HEAD:main

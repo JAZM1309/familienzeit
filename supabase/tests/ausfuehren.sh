@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Baut eine frische Test-Datenbank auf und führt die Sicherheitstests aus.
-# Aufruf: DB_URL=postgresql://… supabase/tests/ausfuehren.sh
+# Aufruf: DB_URL=postgresql://… supabase/tests/ausfuehren.sh   (NUR_AUFBAU=1: ohne Tests)
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 run() { psql "$DB_URL" -v ON_ERROR_STOP=1 -q "$@"; }
@@ -12,5 +12,7 @@ for f in $(ls supabase/migrations/*.sql | sort); do
   grep -v -i -E '^create extension if not exists (pg_net|pg_cron)' "$f" | run >/dev/null
 done
 unset PGOPTIONS
+# NUR_AUFBAU=1: nur die Struktur aufbauen (z. B. für den Probelauf einer Wiederherstellung)
+[ "${NUR_AUFBAU:-}" = "1" ] && exit 0
 echo "→ Sicherheitstests"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/sicherheit.sql 2>&1 | sed -e 's/^psql:[^:]*:[0-9]*: //' -e 's/^NOTICE:  //'

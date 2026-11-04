@@ -1,0 +1,164 @@
+# Spielt eine wöchentliche Sicherung wieder ein – als Probelauf oder echt.
+# Probelauf: in einer leeren Testdatenbank bei GitHub, deine App bleibt unberührt.
+# Echt:      vorher wird der aktuelle Stand gesichert („rückgängig“ möglich), dann werden die Daten ersetzt.
+# Benötigte Repository-Secrets: BACKUP_TOKEN, BACKUP_PASSWORD und für „Echt“ SUPABASE_DB_URL.
+name: Wiederherstellung
+
+on:
+  workflow_dispatch:
+    inputs:
+      sicherung:
+        description: 'Welche Sicherung? neueste · ein Datum (JJJJ-MM-TT) · rückgängig (= Stand vor der letzten Wiederherstellung) · oder genauer Dateiname'
+        required: true
+        default: neueste
+      modus:
+        description: 'Probelauf prüft nur, deine App bleibt unberührt. Echt ersetzt die Daten.'
+        type: choice
+        options: [Probelauf, Echt]
+        default: Probelauf
+      konten:
+        description: 'Nur bei Echt: fehlende Konten aus der Sicherung ergänzen (nur nötig, wenn Konten verloren sind)'
+        type: boolean
+        default: false
+      bestaetigung:
+        description: 'Nur bei Echt: zur Bestätigung WIEDERHERSTELLEN eintippen'
+        required: false
+        default: ''
+
+# Nie gleichzeitig mit „Datenbank aktualisieren“
+concurrency:
+  group: datenbank
+  cancel-in-progress: false
+
+jobs:
+  pruefen:
+    runs-on: ubuntu-latest
+    outputs:
+      datei: ${{ steps.waehlen.outputs.datei }}
+    env:
+      MODUS: ${{ inputs.modus }}
+      BESTAETIGUNG: ${{ inputs.bestaetigung }}
+      SICHERUNG: ${{ inputs.sicherung }}
+      HAS_DB: ${{ secrets.SUPABASE_DB_URL != '' }}
+      BACKUP_TOKEN: ${{ secrets.BACKUP_TOKEN }}
+      HAS_PW: ${{ secrets.BACKUP_PASSWORD != '' }}
+      BACKUP_REPO: ${{ vars.BACKUP_REPO || 'JAZM1309/familienzeit-backup' }}
+    steps:
+      - name: Eingaben prüfen
+        run: |
+          missing=""
+          [ -z "$BACKUP_TOKEN" ] && missing="$missing BACKUP_TOKEN"
+          [ "$HAS_PW" != "true" ] && missing="$missing BACKUP_PASSWORD"
+          [ "$MODUS" = "Echt" ] && [ "$HAS_DB" != "true" ] && missing="$missing SUPABASE_DB_URL"
+          if [ -n "$missing" ]; then
+            echo "::error::Es fehlen Secrets:$missing (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+          if [ "$MODUS" = "Echt" ] && [ "$(echo "$BESTAETIGUNG" | tr -d '[:space:]')" != "WIEDERHERSTELLEN" ]; then
+            echo "::error::Für eine echte Wiederherstellung bitte im Feld „Bestätigung“ genau WIEDERHERSTELLEN eintippen. Es wurde nichts verändert."
+            exit 1
+          fi
+
+      # Die Sicherung wird VOR der Sicherung des aktuellen Stands ausgewählt,
+      # damit „rückgängig“ nicht den gerade erst angelegten Stand erwischt.
+      - name: Sicherung auswählen
+        id: waehlen
+        run: |
+          set -euo pipefail
+          git clone --quiet --depth 1 "https://x-access-token:${BACKUP_TOKEN}@github.com/${BACKUP_REPO}.git" quelle \
+            || { echo "::error::Das Sicherungs-Repository $BACKUP_REPO ist nicht erreichbar (BACKUP_TOKEN prüfen)."; exit 1; }
+          sel=$(echo "$SICHERUNG" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+          regulaer() { { ls quelle | grep -E '^familienzeit-[0-9]{4}-[0-9]{2}-[0-9]{2}\.tar\.gz\.gpg$' || true; } | sort; }
+          vorher()   { { ls quelle | grep -E '^familienzeit-.*-vor-wiederherstellung\.tar\.gz\.gpg$' || true; } | sort; }
+          case "$sel" in
+            ""|neueste) datei=$(regulaer | tail -1) ;;
+            rückgängig|rueckgaengig|ruckgangig|rückgaengig) datei=$(vorher | tail -1) ;;
+            [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) datei="familienzeit-$sel.tar.gz.gpg" ;;
+            familienzeit-*.tar.gz.gpg) datei="$sel" ;;
+            *) datei="" ;;
+          esac
+          if [ -z "$datei" ] || ! [[ "$datei" =~ ^familienzeit-[0-9a-z-]+\.tar\.gz\.gpg$ ]] || [ ! -f "quelle/$datei" ]; then
+            echo "::error::Keine passende Sicherung zu „$SICHERUNG“ gefunden. Vorhanden: $( { regulaer; vorher; } | sed 's/^familienzeit-//; s/\.tar\.gz\.gpg$//' | paste -sd, - )"
+            exit 1
+          fi
+          echo "datei=$datei" >> "$GITHUB_OUTPUT"
+          echo "Gewählt: **$datei** · Modus: **$MODUS**" >> "$GITHUB_STEP_SUMMARY"
+          echo "Gewählt: $datei"
+
+  vorher_sichern:
+    needs: pruefen
+    if: inputs.modus == 'Echt'
+    uses: ./.github/workflows/datensicherung.yml
+    with:
+      zusatz: vor-wiederherstellung
+    secrets: inherit
+
+  einspielen:
+    needs: [pruefen, vorher_sichern]
+    if: always() && needs.pruefen.result == 'success' && (needs.vorher_sichern.result == 'success' || needs.vorher_sichern.result == 'skipped')
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATEI: ${{ needs.pruefen.outputs.datei }}
+      MODUS: ${{ inputs.modus }}
+      KONTEN: ${{ inputs.konten && 'ja' || 'nein' }}
+      BACKUP_TOKEN: ${{ secrets.BACKUP_TOKEN }}
+      BACKUP_PASSWORD: ${{ secrets.BACKUP_PASSWORD }}
+      BACKUP_REPO: ${{ vars.BACKUP_REPO || 'JAZM1309/familienzeit-backup' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Datenbank-Werkzeuge installieren
+        run: |
+          sudo apt-get -qq update
+          sudo apt-get -qq install -y postgresql-common >/dev/null
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y >/dev/null
+          sudo apt-get -qq install -y postgresql-client >/dev/null
+          pg_restore --version
+
+      - name: Sicherung holen und entschlüsseln
+        run: |
+          set -euo pipefail
+          git clone --quiet --depth 1 "https://x-access-token:${BACKUP_TOKEN}@github.com/${BACKUP_REPO}.git" quelle
+          [ -f "quelle/$DATEI" ] || { echo "::error::$DATEI nicht gefunden."; exit 1; }
+          if ! gpg --batch --quiet --pinentry-mode loopback --passphrase "$BACKUP_PASSWORD" \
+               -d "quelle/$DATEI" > sicherung.tar.gz 2>/dev/null; then
+            echo "::error::Entschlüsseln fehlgeschlagen. Stimmt BACKUP_PASSWORD noch mit dem Passwort überein, mit dem diese Sicherung erstellt wurde?"
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/dump"
+          tar xzf sicherung.tar.gz -C "$RUNNER_TEMP/dump"
+          rm -rf quelle sicherung.tar.gz
+          ls -l "$RUNNER_TEMP/dump"
+
+      - name: Probelauf in einer leeren Testdatenbank
+        if: inputs.modus == 'Probelauf'
+        env:
+          DB_URL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: |
+          set -euo pipefail
+          echo "→ Testdatenbank mit der aktuellen Struktur aufbauen …"
+          NUR_AUFBAU=1 bash supabase/tests/ausfuehren.sh > "$RUNNER_TEMP/aufbau.log" 2>&1 \
+            || { cat "$RUNNER_TEMP/aufbau.log"; echo "::error::Die Testdatenbank konnte nicht aufgebaut werden."; exit 1; }
+          grep '^→' "$RUNNER_TEMP/aufbau.log" || true
+          MODUS=probe DUMP_DIR="$RUNNER_TEMP/dump" bash supabase/wiederherstellung/einspielen.sh
+
+      - name: Echte Wiederherstellung
+        if: inputs.modus == 'Echt'
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          psql "$DB_URL" -tAc "select 'Verbindung ok'"
+          MODUS=echt DUMP_DIR="$RUNNER_TEMP/dump" bash supabase/wiederherstellung/einspielen.sh
+
+      - name: Aufräumen
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/dump"
