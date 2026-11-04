@@ -1,12 +1,12 @@
-import { h, icon, avatar, toast } from '../dom.js';
+import { h, icon, avatar, toast, sheet } from '../dom.js';
 import * as api from '../api.js';
 import { state, urlFor, go, render } from '../app.js';
 import {
   startOfDay, addDays, addMonths, startOfWeek, startOfMonth, sameDay, toDateInput, fromDateInput,
-  fmtMonth, fmtDayLong, WEEKDAYS_SHORT,
+  fmtMonth, fmtDayLong, fmtTime, WEEKDAYS_SHORT,
 } from '../dates.js';
 import { expandAll, onDay } from '../recur.js';
-import { agendaItem, colorsFor, participantIds, FAMILY_COLOR } from '../events.js';
+import { agendaItem, openEvent, colorsFor, participantIds, FAMILY_COLOR } from '../events.js';
 import { calendarMenu } from './calendar-sync.js';
 import { swipeZone } from '../gestures.js';
 
@@ -58,6 +58,47 @@ function dayList(day, occs, { empty = 'Keine Termine.' } = {}) {
   return items.length
     ? h('div', { class: 'ev-list' }, items.map((o) => agendaItem(o, render)))
     : h('p', { class: 'muted small', style: { margin: '4px 0' } }, empty);
+}
+
+// Kurzübersicht beim Antippen eines Tages in der Monatsansicht
+function daySummary(day, occs) {
+  const items = occs.filter((o) => onDay(o, day))
+    .sort((a, b) => (b.allDay - a.allDay) || (a.start - b.start));
+  sheet(fmtDayLong(day), (close) => {
+    const allDay = items.filter((o) => o.allDay);
+    const timed = items.filter((o) => !o.allDay);
+    const parts = [items.length === 1 ? '1 Termin' : `${items.length} Termine`];
+    if (allDay.length) parts.push(`${allDay.length} ganztägig`);
+    if (timed.length) {
+      const first = timed[0].start;
+      const last = timed.reduce((m, o) => (o.end > m ? o.end : m), timed[0].end);
+      const lastShown = sameDay(last, day) ? fmtTime(last) : 'nach Mitternacht';
+      parts.push(`${sameDay(first, day) ? fmtTime(first) : 'ab Vortag'} – ${lastShown}`);
+    }
+    const row = (o) => {
+      const ev = o.event;
+      const ids = participantIds(ev);
+      const who = ev.visibility === 'private' ? 'Nur für dich'
+        : ids.length ? state.members.filter((m) => ids.includes(m.user_id)).map((m) => m.display_name).join(', ') : '';
+      const sub = [o.location, who].filter(Boolean).join(' · ');
+      const startsHere = sameDay(o.start, day);
+      const when = o.allDay ? 'ganztägig' : startsHere ? fmtTime(o.start) : 'bis ' + fmtTime(o.end);
+      return h('button', { class: 'ds-row', onClick: () => { close(); openEvent(o, render); } },
+        h('span', { class: 'ds-time' + (o.allDay ? ' ad' : '') }, when),
+        h('span', { class: 'ds-dots' }, colorsFor(ev).slice(0, 3).map((c) => h('i', { style: { background: c } }))),
+        h('span', { class: 'ds-main' },
+          h('span', { class: 'ds-title' }, o.title, ev.visibility === 'private' ? icon('lock', 13) : null),
+          sub ? h('span', { class: 'ds-sub' }, sub) : null),
+        icon('right', 16));
+    };
+    return h('div', { class: 'day-sum' },
+      items.length
+        ? [h('p', { class: 'ds-meta' }, parts.join(' · ')), h('div', { class: 'ds-list' }, items.map(row))]
+        : h('p', { class: 'muted', style: { margin: '4px 0 12px' } }, 'An diesem Tag sind keine Termine eingetragen.'),
+      h('div', { class: 'ds-actions' },
+        h('button', { class: 'btn ghost', onClick: () => { close(); go(link('day', day)); } }, icon('calendar', 18), 'Tagesansicht'),
+        h('button', { class: 'btn', onClick: () => { close(); go(`/termin?datum=${toDateInput(day)}`); } }, icon('plus', 18), 'Termin')));
+  });
 }
 
 export async function calendarView({ params }) {
@@ -128,6 +169,7 @@ export async function calendarView({ params }) {
             selected = cellDay;
             history.replaceState(null, '', '#' + link('month', cellDay));
             drawContent();
+            daySummary(cellDay, shown());
           },
           onDblclick: () => go(link('day', cellDay)),
         },

@@ -562,3 +562,21 @@ main.enter-left { animation: enterLeft .2s ease both; }
 .fold-stack > .card + .card { margin-top: 18px; }
 .sheet .card.fold { box-shadow: none; border: 1px solid var(--line); margin-bottom: 10px; }
 @media (prefers-reduced-motion: reduce) { .fold-body { animation: none; } .fold-chevron { transition: none; } }
+
+/* 1.8.6 – Tages-Kurzübersicht */
+.day-sum .ds-meta { margin: 0 0 10px; color: var(--muted); font-size: .9rem; }
+.ds-list { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; margin-bottom: 14px; }
+.ds-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 11px 12px; background: none; border: 0; border-top: 1px solid var(--line); color: var(--text); text-align: left; font: inherit; cursor: pointer; }
+.ds-row:first-child { border-top: 0; }
+.ds-row:active { background: var(--sky); }
+.ds-row > svg { color: var(--muted); flex: none; }
+.ds-time { flex: none; width: 54px; font-weight: 600; font-variant-numeric: tabular-nums; font-size: .92rem; }
+.ds-time.ad { font-weight: 500; font-size: .74rem; color: var(--muted); }
+.ds-dots { flex: none; display: flex; flex-direction: column; gap: 2px; }
+.ds-dots i { width: 9px; height: 9px; border-radius: 50%; display: block; }
+.ds-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ds-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 5px; }
+.ds-title svg { flex: none; color: var(--muted); }
+.ds-sub { font-size: .8rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ds-actions { display: flex; gap: 10px; }
+.ds-actions .btn { flex: 1; }
