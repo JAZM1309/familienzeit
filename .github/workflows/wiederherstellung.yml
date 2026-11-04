@@ -3,6 +3,7 @@
 # Echt:      vorher wird der aktuelle Stand gesichert („rückgängig“ möglich), dann werden die Daten ersetzt.
 # Benötigte Repository-Secrets: BACKUP_TOKEN, BACKUP_PASSWORD und für „Echt“ SUPABASE_DB_URL.
 name: Wiederherstellung
+run-name: Wiederherstellung – ${{ inputs.modus }} (${{ inputs.sicherung }})
 
 on:
   workflow_dispatch:

@@ -621,3 +621,22 @@ main.enter-left { animation: enterLeft .2s ease both; }
 .emoji-lead { width: 36px; height: 36px; flex: none; display: grid; place-items: center; font-size: 1.5rem; background: var(--sky); border-radius: 10px; }
 .emoji-groups .emoji-grid { grid-template-columns: repeat(6, 1fr); gap: 8px; }
 .emoji-groups .emoji-grid button { font-size: 1.6rem; border-radius: 14px; }
+
+/* 1.9.1 – Wiederherstellung aus der App */
+.rs-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
+.rs-run { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; color: var(--text); text-decoration: none; }
+.rs-run > svg { color: var(--muted); flex: none; }
+.rs-ic { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--sky); color: var(--muted); }
+.rs-run.ok .rs-ic { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); }
+.rs-run.bad .rs-ic { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
+.rs-run.busy .rs-ic { color: var(--teal); animation: rs-pulse 1.4s ease-in-out infinite; }
+@keyframes rs-pulse { 50% { opacity: .45; } }
+.rs-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.rs-main strong { font-size: .95rem; }
+.rs-main span { font-size: .8rem; color: var(--muted); }
+.rs-main .rs-hint { color: var(--danger); margin-top: 2px; }
+.rs-check { display: flex; gap: 10px; align-items: flex-start; margin: 14px 0; cursor: pointer; }
+.rs-check input { width: 20px; height: 20px; margin-top: 2px; flex: none; accent-color: var(--primary); }
+.rs-check > span { display: flex; flex-direction: column; gap: 2px; }
+.notice.warn { background: color-mix(in srgb, var(--orange) 14%, transparent); }
+.notice.warn svg { color: var(--orange); }

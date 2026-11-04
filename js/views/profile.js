@@ -5,6 +5,7 @@ import { updateCard } from '../updater.js';
 import { notificationsCard } from '../push.js';
 import { securityCard, defaultsCard } from '../settings.js';
 import { backupCard } from '../backup.js';
+import { restoreCard } from '../restore.js';
 import { gesturesEnabled, setGesturesEnabled } from '../gestures.js';
 import { APP_VERSION } from '../config.js';
 
@@ -233,6 +234,7 @@ export async function profileView() {
     f('sicherheit', 'Sicherheit und Geräte', 'shield', securityCard),
     f('konto', 'Konto', 'lock', passwordCard, state.me.email),
     isAdmin() ? f('speicher', 'Speicher und Datensicherung', 'download', backupCard) : null,
+    isAdmin() ? f('wiederherstellung', 'Wiederherstellung', 'repeat', restoreCard, 'Probelauf und Notfall') : null,
     isAdmin() ? f('update', 'App-Update', 'download', updateCard, `installiert: ${APP_VERSION}`) : null,
     h('p', { class: 'version' }, `Familienzeit ${APP_VERSION}`));
 }

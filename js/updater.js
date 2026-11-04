@@ -7,7 +7,7 @@ import { readZip } from './unzip.js';
 const KEY = 'fz-github';
 const DEFAULT_REPO = 'JAZM1309/Familienzeit';
 
-function loadCfg() {
+export function loadCfg() {
   try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { return null; }
 }
 function saveCfg(cfg) {
@@ -15,11 +15,11 @@ function saveCfg(cfg) {
 }
 
 // ---------- GitHub-API ----------
-class GitHubError extends Error {
+export class GitHubError extends Error {
   constructor(status, body) { super(body); this.status = status; }
 }
 
-async function gh(cfg, path, opts = {}) {
+export async function gh(cfg, path, opts = {}) {
   const res = await fetch('https://api.github.com' + path, {
     ...opts,
     headers: {
@@ -44,7 +44,7 @@ function ghMessage(e) {
   return 'GitHub-Fehler. Bitte später noch einmal versuchen.';
 }
 
-const enc = (s) => s.split('/').map(encodeURIComponent).join('/');
+export const enc = (s) => s.split('/').map(encodeURIComponent).join('/');
 
 // ---------- ZIP lesen ----------
 
@@ -149,7 +149,7 @@ function setupSheet(onDone) {
     },
     err,
     h('div', { class: 'notice' }, icon('info', 20), h('span', null,
-      'Token anlegen: GitHub → Settings → Developer settings → Fine-grained tokens. Nur Zugriff auf dieses Repository, Rechte „Contents“ und „Workflows“ auf „Read and write“. Der Token bleibt nur auf diesem Gerät.')),
+      'Token anlegen: GitHub → Settings → Developer settings → Fine-grained tokens. Nur Zugriff auf dieses Repository, Rechte „Contents“, „Workflows“ und „Actions“ auf „Read and write“ (Actions nur für die Wiederherstellung). Der Token bleibt nur auf diesem Gerät.')),
     field('Repository', repo),
     field('Branch', branch),
     field('Token', token),
