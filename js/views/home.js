@@ -9,6 +9,8 @@ import { taskItem, assigneeIds } from './tasks.js';
 import { mealCard } from './meals.js';
 import { itemLabel } from '../shopping-parse.js';
 import { usageWarning } from '../backup.js';
+import { heroCard, overviewCard } from '../home-hero.js';
+import { startOfWeek } from '../dates.js';
 
 // Bereiche der Startseite. "version" = ab wann der Bereich Inhalte zeigt.
 const SECTIONS = {
@@ -250,12 +252,28 @@ export async function homeView() {
     catch (e) { toast(api.germanError(e), { type: 'error' }); }
   }
 
+  // Kopfbereich: Illustration nach Tageszeit und Tagesüberblick
+  const showArt = true;
+  const showOv = true;
+  let overview = null;
+  if (showOv) {
+    try {
+      const ws = startOfWeek(now);
+      const we = addDays(ws, 7);
+      const [tasks, evs] = await Promise.all([api.listTasks(), api.eventsInRange(ws, we)]);
+      overview = overviewCard({ tasks, weekOccs: expandAll(evs, ws, we), now });
+    } catch { /* egal */ }
+  }
+  const title = `${greeting(now)}, ${state.me.display_name}`;
+  const custom = h('button', { class: 'iconbtn', 'aria-label': 'Startseite anpassen', onClick: customize }, icon('sliders'));
+
   return h('div', null,
-    h('div', { class: 'hello' },
-      h('div', { class: 'grow' },
-        h('h1', null, `${greeting(now)}, ${state.me.display_name}`),
-        h('p', null, date)),
-      h('button', { class: 'iconbtn', 'aria-label': 'Startseite anpassen', onClick: customize }, icon('sliders'))),
+    showArt
+      ? heroCard({ title, subtitle: date, action: custom, now })
+      : h('div', { class: 'hello' },
+        h('div', { class: 'grow' }, h('h1', null, title), h('p', null, date)),
+        custom),
+    overview,
     installHint(),
     await usageWarning(),
     visible.length

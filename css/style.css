@@ -580,3 +580,37 @@ main.enter-left { animation: enterLeft .2s ease both; }
 .ds-sub { font-size: .8rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ds-actions { display: flex; gap: 10px; }
 .ds-actions .btn { flex: 1; }
+
+/* 1.8.7 – Kopfbild und Tagesüberblick */
+.hero { position: relative; border-radius: var(--radius); overflow: hidden; margin: 12px 0 14px; min-height: 178px; box-shadow: var(--shadow); isolation: isolate; }
+.hero-art { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; display: block; }
+.hero-text { display: flex; align-items: flex-start; gap: 10px; padding: 16px 14px 0 18px; }
+.hero-text .grow { flex: 1; min-width: 0; }
+.hero-text h1 { margin: 0; font-size: 1.45rem; line-height: 1.2; }
+.hero-text p { margin: 4px 0 0; opacity: .85; font-size: .92rem; }
+.hero-text .iconbtn { color: inherit; background: color-mix(in srgb, currentColor 14%, transparent); }
+.hero-abend h1, .hero-nacht h1 { text-shadow: 0 1px 6px rgba(0,0,0,.25); }
+
+.overview { padding-bottom: 12px; }
+.ov-top { display: flex; gap: 12px; align-items: stretch; }
+.ov-tasks, .ov-events { background: none; border: 0; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; display: flex; align-items: center; gap: 12px; min-width: 0; }
+.ov-tasks { flex: 1.35; }
+.ov-lbl strong { white-space: nowrap; }
+.ov-events { flex: 1; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; border-left: 1px solid var(--line); padding-left: 12px; }
+.ov-ring-wrap { position: relative; width: 64px; height: 64px; flex: none; }
+.ov-ring-bg { stroke: var(--sky); }
+.ov-ring-fg { stroke: var(--teal); transition: stroke-dasharray .4s; }
+.ov-ring-txt { position: absolute; inset: 0; display: grid; place-items: center; font-weight: 700; font-size: .95rem; color: var(--teal); }
+.ov-lbl, .ov-events { display: flex; flex-direction: column; min-width: 0; }
+.ov-lbl strong, .ov-events strong { font-size: 1rem; }
+.ov-lbl span, .ov-events span { font-size: .82rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.ov-sub { margin: 14px 0 6px; font-size: .78rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.ov-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.ov-bar { background: none; border: 0; padding: 0; color: inherit; font: inherit; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; }
+.ov-n { font-size: .74rem; font-weight: 600; color: var(--muted); height: 14px; }
+.ov-col { width: 100%; max-width: 30px; height: 54px; display: flex; align-items: flex-end; background: var(--sky); border-radius: 8px; overflow: hidden; }
+.ov-col i { display: block; width: 100%; background: color-mix(in srgb, var(--primary) 55%, var(--sky)); border-radius: 8px; }
+.ov-bar.past .ov-col i { opacity: .5; }
+.ov-bar.today .ov-col i { background: var(--teal); }
+.ov-bar.today .ov-wd, .ov-bar.today .ov-n { color: var(--teal); font-weight: 700; }
+.ov-wd { font-size: .74rem; color: var(--muted); }
