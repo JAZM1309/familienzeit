@@ -135,7 +135,7 @@ async function fetchIcs(url: string): Promise<string> {
 
 async function syncOneFeed(): Promise<string | null> {
   const [f] = await sql`
-    select f.id, f.family_id, f.user_id, f.visibility, f.assign_me, u.url
+    select f.id, f.family_id, f.user_id, f.visibility, f.assign_me, f.color, u.url
     from public.calendar_feeds f join public.calendar_feed_urls u on u.feed_id = f.id
     where not f.paused
       and (f.sync_requested or f.last_sync_at is null
@@ -162,10 +162,10 @@ async function syncOneFeed(): Promise<string | null> {
     await tx`select set_config('fz.bulk', 'on', true)`;
     const existing = await tx`
       select e.id, e.external_uid, e.title, e.description, e.location, e.starts_at, e.ends_at, e.all_day, e.rrule,
-             e.until::text as until, e.visibility,
+             e.until::text as until, e.visibility, e.color,
              coalesce((select json_agg(x) from public.event_exceptions x where x.event_id = e.id), '[]'::json) as exceptions
       from public.events e where e.feed_id = ${f.id}`;
-    const plan = planSync(existing, items, f.visibility);
+    const plan = planSync(existing, items, f.visibility, f.color);
     total = plan.total;
 
     const writeExceptions = async (id: string, list: any[]) => {
@@ -181,9 +181,9 @@ async function syncOneFeed(): Promise<string | null> {
     for (const n of plan.inserts) {
       const [row] = await tx`
         insert into public.events (family_id, owner_id, title, description, location, starts_at, ends_at, all_day,
-                                   visibility, rrule, until, source, feed_id, external_uid)
+                                   visibility, rrule, until, source, feed_id, external_uid, color)
         values (${f.family_id}, ${f.user_id}, ${n.title}, ${n.description}, ${n.location}, ${n.starts_at}, ${n.ends_at}, ${n.all_day},
-                ${f.visibility}, ${n.rrule}, ${n.until}, 'feed', ${f.id}, ${n.external_uid})
+                ${f.visibility}, ${n.rrule}, ${n.until}, 'feed', ${f.id}, ${n.external_uid}, ${f.color})
         returning id`;
       if (assign) await tx`insert into public.event_participants (event_id, user_id) values (${row.id}, ${f.user_id}) on conflict do nothing`;
       if (n.exceptions.length) await writeExceptions(row.id, n.exceptions);
@@ -193,7 +193,7 @@ async function syncOneFeed(): Promise<string | null> {
       if (u.main) {
         await tx`update public.events set title = ${n.title}, description = ${n.description}, location = ${n.location},
           starts_at = ${n.starts_at}, ends_at = ${n.ends_at}, all_day = ${n.all_day}, rrule = ${n.rrule}, until = ${n.until},
-          visibility = ${f.visibility}
+          visibility = ${f.visibility}, color = ${f.color}
           where id = ${u.id}`;
       }
       if (u.exc) await writeExceptions(u.id, n.exceptions);

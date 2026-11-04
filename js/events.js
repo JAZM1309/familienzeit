@@ -27,6 +27,7 @@ function byName(id) { return id === state.me.user_id ? 'dir' : nameOf(id); }
 export function participantIds(ev) { return (ev.event_participants || []).map((p) => p.user_id); }
 
 export function colorsFor(ev) {
+  if (ev.color) return [ev.color]; // Farbe des externen oder importierten Kalenders
   if (ev.visibility === 'private') return [memberById(ev.owner_id)?.color || FAMILY_COLOR];
   const ids = participantIds(ev);
   if (!ids.length) return [FAMILY_COLOR];

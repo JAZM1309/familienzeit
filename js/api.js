@@ -470,20 +470,32 @@ export function watchShopping(onChange) {
 }
 
 // ---------- Kalenderimport und externe Kalender (ab Version 1.7) ----------
-export async function importEvents(items, participants, visibility) {
-  return check(await sb.rpc('import_events', { p_items: items, p_participants: participants, p_visibility: visibility }));
+export async function importEvents(items, participants, visibility, name, color) {
+  return check(await sb.rpc('import_events', { p_items: items, p_participants: participants, p_visibility: visibility, p_name: name, p_color: color }));
+}
+
+export async function listImports() {
+  return check(await sb.from('calendar_imports').select('*').order('created_at', { ascending: true }));
+}
+
+export async function updateImport(id, name, color) {
+  return check(await sb.rpc('update_import', { p_id: id, p_name: name, p_color: color }));
+}
+
+export async function deleteImport(id) {
+  return check(await sb.rpc('delete_import', { p_id: id }));
 }
 
 export async function listFeeds() {
   return check(await sb.from('calendar_feeds').select('*').order('created_at', { ascending: true }));
 }
 
-export async function addFeed({ label, provider, url, visibility, assignMe }) {
-  return check(await sb.rpc('add_feed', { p_label: label, p_provider: provider, p_url: url, p_visibility: visibility, p_assign_me: assignMe }));
+export async function addFeed({ label, provider, url, visibility, assignMe, color }) {
+  return check(await sb.rpc('add_feed', { p_label: label, p_provider: provider, p_url: url, p_visibility: visibility, p_assign_me: assignMe, p_color: color }));
 }
 
 export async function updateFeed(f) {
-  return check(await sb.rpc('update_feed', { p_id: f.id, p_label: f.label, p_visibility: f.visibility, p_assign_me: f.assign_me, p_paused: f.paused }));
+  return check(await sb.rpc('update_feed', { p_id: f.id, p_label: f.label, p_visibility: f.visibility, p_assign_me: f.assign_me, p_paused: f.paused, p_color: f.color }));
 }
 
 export async function requestFeedSync(id) {

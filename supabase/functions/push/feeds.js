@@ -10,17 +10,18 @@ function normExceptions(list) {
   })).sort((a, b) => a.o - b.o));
 }
 
-function sameMain(old, n, visibility) {
+function sameMain(old, n, visibility, color) {
   return str(old.title) === str(n.title) && str(old.description) === str(n.description) && str(old.location) === str(n.location)
     && ts(old.starts_at) === ts(n.starts_at) && ts(old.ends_at) === ts(n.ends_at) && !!old.all_day === !!n.all_day
-    && str(old.rrule) === str(n.rrule) && str(old.until) === str(n.until) && old.visibility === visibility;
+    && str(old.rrule) === str(n.rrule) && str(old.until) === str(n.until) && old.visibility === visibility
+    && str(old.color) === str(color);
 }
 
 /**
  * existing: Termine dieses Abos aus der Datenbank (mit exceptions)
  * incoming: Ergebnis von icsToEvents().events
  */
-export function planSync(existing, incoming, visibility) {
+export function planSync(existing, incoming, visibility, color = null) {
   const byKey = new Map(existing.map((e) => [e.external_uid, e]));
   const seen = new Set();
   const inserts = [];
@@ -30,7 +31,7 @@ export function planSync(existing, incoming, visibility) {
     seen.add(n.external_uid);
     const old = byKey.get(n.external_uid);
     if (!old) { inserts.push(n); continue; }
-    const main = !sameMain(old, n, visibility);
+    const main = !sameMain(old, n, visibility, color);
     const exc = normExceptions(old.exceptions) !== normExceptions(n.exceptions);
     if (main || exc) updates.push({ id: old.id, item: n, main, exc });
   }

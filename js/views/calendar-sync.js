@@ -19,6 +19,31 @@ function seg(options, value, onPick, label) {
   return el;
 }
 
+// Farbauswahl für Kalender
+export const CAL_COLORS = ['#5B7FDB', '#2F8FB8', '#27A99A', '#3F9C4F', '#B08A2E', '#E9A34A', '#D9604C', '#C9567A', '#8A63D2', '#6B7A8F'];
+
+export function suggestColor(used = []) {
+  const taken = new Set([...state.members.map((m) => m.color.toUpperCase()), ...used.map((c) => c.toUpperCase())]);
+  return CAL_COLORS.find((c) => !taken.has(c)) || CAL_COLORS[0];
+}
+
+function colorPicker(value, onPick) {
+  const wrap = h('div', { class: 'swatches' });
+  const draw = (v) => {
+    const custom = h('input', { type: 'color', value: v, 'aria-label': 'Eigene Farbe wählen' });
+    custom.addEventListener('change', () => { draw(custom.value.toUpperCase()); onPick(custom.value.toUpperCase()); });
+    const isCustom = !CAL_COLORS.includes(v.toUpperCase());
+    wrap.replaceChildren(
+      ...CAL_COLORS.map((c) => h('button', {
+        type: 'button', class: 'swatch', style: { background: c }, 'aria-label': `Farbe ${c}`, 'aria-pressed': String(c === v.toUpperCase()),
+        onClick: () => { draw(c); onPick(c); },
+      }, c === v.toUpperCase() ? icon('check', 18) : null)),
+      h('label', { class: 'swatch custom', 'aria-pressed': String(isCustom), title: 'Eigene Farbe' }, isCustom ? icon('check', 18) : null, custom));
+  };
+  draw(value);
+  return wrap;
+}
+
 function chip(label, on, onToggle, extra) {
   const b = h('button', { type: 'button', class: 'fchip', 'aria-pressed': String(on) }, extra, label);
   b.addEventListener('click', () => { const now = b.getAttribute('aria-pressed') !== 'true'; b.setAttribute('aria-pressed', String(now)); onToggle(now); });
@@ -32,8 +57,8 @@ export function calendarMenu() {
       h('span', { class: 'card-icon' }, icon('download', 19)), h('strong', null, 'Kalenderdatei importieren'),
       h('span', { class: 'muted small' }, 'Termine aus einer .ics-Datei einmalig übernehmen, z. B. aus dem Apple-Kalender oder einem Schulkalender.')),
     h('button', { onClick: () => { close(); go('/kalender-abos'); } },
-      h('span', { class: 'card-icon' }, icon('link', 19)), h('strong', null, 'Externe Kalender'),
-      h('span', { class: 'muted small' }, 'Google- oder Outlook-Kalender abonnieren. Neue Termine kommen automatisch dazu.'))));
+      h('span', { class: 'card-icon' }, icon('link', 19)), h('strong', null, 'Meine Kalender'),
+      h('span', { class: 'muted small' }, 'Google- oder Outlook-Kalender abonnieren, Farben ändern, importierte Kalender verwalten.'))));
 }
 
 // ---------- Import ----------
@@ -89,6 +114,10 @@ export async function importView() {
 
     const chosen = new Set(events.map((e, i) => (dup(e) ? -1 : i)).filter((i) => i >= 0));
     let visibility = 'family';
+    let existingImports = [];
+    try { existingImports = await api.listImports(); } catch { /* egal */ }
+    let color = suggestColor(existingImports.map((i) => i.color));
+    const calNameInput = h('input', { class: 'input', value: calName || fileName.replace(/\.ics$/i, ''), maxlength: 60 });
     const people = new Set();
     const peopleWrap = h('div');
     const drawPeople = () => {
@@ -129,7 +158,8 @@ export async function importView() {
       const items = events.filter((_, i) => chosen.has(i)).map(({ recurring, ...rest }) => rest);
       busy(submit, true, 'Wird importiert …');
       try {
-        const n = await api.importEvents(items, visibility === 'private' ? [] : [...people], visibility);
+        const n = await api.importEvents(items, visibility === 'private' ? [] : [...people], visibility,
+          calNameInput.value.trim() || 'Importierter Kalender', color);
         toast(n === 1 ? '1 Termin importiert.' : `${n} Termine importiert.`);
         const firstStart = items.map((e) => e.starts_at).sort()[0];
         go(`/kalender?v=month&d=${toDateInput(new Date(Math.max(new Date(firstStart).getTime(), Date.now())))}`);
@@ -143,6 +173,9 @@ export async function importView() {
           h('h2', null, calName || fileName), h('button', { class: 'link-btn', onClick: () => body.replaceChildren(pickCard) }, 'Andere Datei')),
         h('p', { class: 'muted small', style: { margin: 0 } },
           `${events.length === 1 ? '1 Termin' : events.length + ' Termine'} gefunden (Vergangenes, das älter als 30 Tage ist, wird ausgelassen).`, dupCount ? ` ${dupCount} davon sind wohl schon im Kalender und deshalb abgewählt.` : '')),
+      h('section', { class: 'card' },
+        field('Name des Kalenders', calNameInput),
+        h('div', { class: 'field', style: { marginBottom: 0 } }, h('label', null, 'Farbe'), colorPicker(color, (c) => { color = c; }))),
       h('section', { class: 'card' },
         h('div', { class: 'field' }, h('label', null, 'Wer'), peopleWrap),
         h('div', { class: 'field', style: { marginBottom: 0 } }, h('label', null, 'Sichtbarkeit'),
@@ -195,6 +228,7 @@ function feedForm(initial, onSave) {
     const err = h('div', { class: 'error', role: 'alert', hidden: true });
     let provider = initial.provider || 'google';
     let visibility = initial.visibility || 'private';
+    let color = initial.color || suggestColor(initial.usedColors || []);
     const isNew = !initial.id;
     const url = h('input', { class: 'input', type: 'url', inputmode: 'url', autocomplete: 'off', placeholder: 'https://… oder webcal://…', maxlength: 2000 });
     const label = h('input', { class: 'input', value: initial.label || PROVIDERS[provider].label, maxlength: 60 });
@@ -220,7 +254,7 @@ function feedForm(initial, onSave) {
         if (isNew && !url.value.trim()) { err.textContent = 'Bitte den Kalender-Link einfügen.'; err.hidden = false; return; }
         busy(save, true, 'Speichern …');
         try {
-          await onSave({ provider, url: url.value.trim(), label: label.value.trim() || PROVIDERS[provider].label, visibility, assign_me: assign.checked });
+          await onSave({ provider, url: url.value.trim(), label: label.value.trim() || PROVIDERS[provider].label, visibility, assign_me: assign.checked, color });
           close();
         } catch (ex) { err.textContent = api.germanError(ex); err.hidden = false; busy(save, false); }
       },
@@ -231,6 +265,7 @@ function feedForm(initial, onSave) {
     isNew ? h('div', { class: 'notice' }, icon('info', 20), h('div', null, h('strong', null, 'So findest du den Link'), steps)) : null,
     isNew ? field('Kalender-Link', url, 'Der Link ist privat: Er wird sicher gespeichert und ist für niemanden in der Familie sichtbar, auch nicht für dich.') : null,
     field('Name in Familienzeit', label),
+    h('div', { class: 'field' }, h('label', null, 'Farbe'), colorPicker(color, (c) => { color = c; })),
     h('div', { class: 'field' }, h('label', null, 'Wer sieht die Termine'), seg(visOptions(), visibility, (v) => { visibility = v; drawVis(); }, 'Sichtbarkeit'), visHint),
     assignRow,
     isNew ? h('p', { class: 'muted small' }, 'Apple-Kalender (iCloud) bitte über „Kalenderdatei importieren“ übernehmen.') : null,
@@ -238,15 +273,48 @@ function feedForm(initial, onSave) {
   };
 }
 
+function importCard(imp) {
+  const edit = () => sheet('Kalender bearbeiten', (close) => {
+    const name = h('input', { class: 'input', value: imp.name, maxlength: 60 });
+    let color = imp.color;
+    const save = h('button', { class: 'btn teal block', type: 'submit' }, 'Speichern');
+    return h('form', {
+      onSubmit: async (e) => {
+        e.preventDefault();
+        busy(save, true, 'Speichern …');
+        try { await api.updateImport(imp.id, name.value.trim() || imp.name, color); close(); toast('Gespeichert.'); render(); }
+        catch (ex) { toast(api.germanError(ex), { type: 'error' }); busy(save, false); }
+      },
+    }, field('Name', name), h('div', { class: 'field' }, h('label', null, 'Farbe'), colorPicker(color, (c) => { color = c; })), save);
+  });
+  return h('section', { class: 'card' },
+    h('div', { class: 'card-head' },
+      h('span', { class: 'cal-dot', style: { background: imp.color } }),
+      h('h2', null, imp.name, ' ', h('span', { class: 'pill' }, 'Importiert'))),
+    h('p', { class: 'muted small', style: { margin: '0 0 12px' } },
+      `${imp.event_count} ${imp.event_count === 1 ? 'Termin' : 'Termine'} · importiert am ${new Date(imp.created_at).toLocaleDateString('de-DE')}`),
+    h('div', { class: 'btn-row' },
+      h('button', { class: 'btn ghost small', onClick: edit }, 'Name und Farbe'),
+      h('button', {
+        class: 'btn danger small',
+        onClick: async () => {
+          if (!(await confirmDialog({ title: 'Kalender entfernen?', text: `Alle aus „${imp.name}“ importierten Termine werden aus Familienzeit gelöscht, auch für die anderen.`, ok: 'Entfernen', danger: true }))) return;
+          try { await api.deleteImport(imp.id); toast('Entfernt.'); render(); } catch (e) { toast(api.germanError(e), { type: 'error' }); }
+        },
+      }, 'Entfernen')));
+}
+
 export async function feedsView() {
   let feeds = [];
-  try { feeds = await api.listFeeds(); } catch (e) { toast(api.germanError(e), { type: 'error' }); }
+  let imports = [];
+  try { [feeds, imports] = await Promise.all([api.listFeeds(), api.listImports()]); } catch (e) { toast(api.germanError(e), { type: 'error' }); }
+  const used = [...feeds.map((f) => f.color), ...imports.map((i) => i.color)];
   const root = h('div');
   let timer = null;
   const later = () => { clearTimeout(timer); timer = setTimeout(() => { if (root.isConnected) render(); }, 8000); };
 
-  const addSheet = () => sheet('Externen Kalender verbinden', feedForm({}, async (v) => {
-    await api.addFeed({ label: v.label, provider: v.provider, url: v.url, visibility: v.visibility, assignMe: v.assign_me });
+  const addSheet = () => sheet('Externen Kalender verbinden', feedForm({ usedColors: used }, async (v) => {
+    await api.addFeed({ label: v.label, provider: v.provider, url: v.url, visibility: v.visibility, assignMe: v.assign_me, color: v.color });
     toast('Verbunden. Die Termine erscheinen in etwa einer Minute.');
     render();
   }));
@@ -259,7 +327,7 @@ export async function feedsView() {
     });
     return h('section', { class: 'card' },
       h('div', { class: 'card-head' },
-        h('div', { class: 'card-icon' }, icon('link', 19)),
+        h('span', { class: 'cal-dot', style: { background: f.color } }),
         h('h2', null, f.label, ' ', h('span', { class: 'pill' }, PROVIDERS[f.provider]?.label || 'Kalender'))),
       h('p', { class: 'small', style: { margin: '0 0 6px' } }, statusOf(f)),
       h('p', { class: 'muted small', style: { margin: '0 0 12px' } },
@@ -276,7 +344,7 @@ export async function feedsView() {
         h('button', {
           class: 'btn ghost small',
           onClick: () => sheet('Kalender bearbeiten', feedForm(f, async (v) => {
-            await api.updateFeed({ ...f, label: v.label, visibility: v.visibility, assign_me: v.assign_me });
+            await api.updateFeed({ ...f, label: v.label, visibility: v.visibility, assign_me: v.assign_me, color: v.color });
             toast('Gespeichert.'); render();
           })),
         }, 'Bearbeiten'),
@@ -294,11 +362,16 @@ export async function feedsView() {
   root.append(
     h('div', { class: 'hello' },
       h('button', { class: 'iconbtn', 'aria-label': 'Zurück', onClick: () => go('/kalender') }, icon('back')),
-      h('div', { class: 'grow' }, h('h1', { style: { fontSize: '1.35rem' } }, 'Externe Kalender'))),
+      h('div', { class: 'grow' }, h('h1', { style: { fontSize: '1.35rem' } }, 'Meine Kalender'))),
     h('p', { class: 'muted small', style: { margin: '-8px 4px 14px' } },
-      'Termine aus deinen Google- oder Outlook-Kalendern werden etwa alle 30 Minuten übernommen – nur in diese Richtung. Jeder verwaltet hier seine eigenen Verbindungen.'),
+      'Jeder Kalender hat eine eigene Farbe. Seine Termine erscheinen im Familienkalender in dieser Farbe – für alle, die sie sehen dürfen. Jeder verwaltet hier nur seine eigenen Kalender.'),
+    h('div', { class: 'section-title' }, 'Abonniert (Google, Outlook …)'),
     ...(feeds.length ? feeds.map(card) : [h('div', { class: 'card', style: { textAlign: 'center' } },
-      h('p', { class: 'muted', style: { marginTop: 0 } }, 'Noch kein externer Kalender verbunden.'))]),
-    feeds.length < 5 ? h('button', { class: 'btn teal block', onClick: addSheet }, icon('plus', 18), 'Kalender verbinden') : null);
+      h('p', { class: 'muted', style: { marginTop: 0 } }, 'Noch kein externer Kalender verbunden. Termine werden etwa alle 30 Minuten übernommen – nur in diese Richtung.'))]),
+    feeds.length < 5 ? h('button', { class: 'btn teal block', onClick: addSheet }, icon('plus', 18), 'Kalender verbinden') : null,
+    h('div', { class: 'section-title' }, 'Importiert'),
+    ...(imports.length ? imports.map(importCard) : [h('div', { class: 'card', style: { textAlign: 'center' } },
+      h('p', { class: 'muted', style: { marginTop: 0 } }, 'Noch keine Kalenderdatei importiert.'))]),
+    h('button', { class: 'btn ghost block', style: { marginBottom: '14px' }, onClick: () => go('/kalender-import') }, icon('download', 18), 'Kalenderdatei importieren'));
   return root;
 }
