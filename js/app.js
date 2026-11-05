@@ -205,6 +205,7 @@ function shell(path, content) {
 
   const enter = takeEnter();
   const main = h('main', { class: 'wrap with-nav' + (enter ? ` enter-${enter}` : '') }, content);
+  if (enter) main.addEventListener('animationend', () => main.classList.remove('enter-right', 'enter-left'), { once: true });
   // Sprachbefehl in allen Hauptrubriken
   const voice = SECTIONS.includes(parseHash().path) ? voiceButton() : null;
   return h('div', null, top, netBanner(), main, voice, bottom);

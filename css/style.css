@@ -535,8 +535,10 @@ section .swipe-wrap:has(.task):last-child { border-bottom: 0; }
 .ptr.ready { color: var(--teal); }
 .ptr.spin svg { animation: spin .7s linear infinite; }
 
-main.enter-right { animation: enterRight .2s ease both; }
-main.enter-left { animation: enterLeft .2s ease both; }
+/* „backwards“ statt „both“: Nach der Animation darf main keine Verschiebung behalten,
+   sonst rutschen schwebende Knöpfe (Plus) mit der Seite aus dem Bildschirm */
+main.enter-right { animation: enterRight .2s ease backwards; }
+main.enter-left { animation: enterLeft .2s ease backwards; }
 @keyframes enterRight { from { transform: translateX(32px); opacity: 0; } }
 @keyframes enterLeft { from { transform: translateX(-32px); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { main.enter-right, main.enter-left { animation: none; } }
