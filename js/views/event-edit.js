@@ -79,19 +79,23 @@ export async function eventEditView({ params }) {
     start = new Date(base);
     const now = new Date();
     const hour = Number(params.get('stunde'));
-    if (params.get('stunde') && hour >= 0 && hour <= 23) start.setHours(hour, 0, 0, 0); // aus der Zeitleiste angetippt
+    const at = /^\d{2}:\d{2}$/.test(params.get('zeit') || '') ? params.get('zeit').split(':').map(Number) : null;
+    if (at) start.setHours(at[0], at[1], 0, 0); // aus dem Sprachbefehl
+    else if (params.get('stunde') && hour >= 0 && hour <= 23) start.setHours(hour, 0, 0, 0); // aus der Zeitleiste angetippt
     else if (base.toDateString() === now.toDateString()) start.setHours(now.getHours() + 1, 0, 0, 0);
     else start.setHours(9, 0, 0, 0);
     end = new Date(start.getTime() + 3600000);
+    const until = /^\d{2}:\d{2}$/.test(params.get('ende') || '') ? params.get('ende').split(':').map(Number) : null;
+    if (until) { const e2 = new Date(start); e2.setHours(until[0], until[1], 0, 0); if (e2 > start) end = e2; }
   }
-  const allDayInit = !!src?.all_day;
+  const allDayInit = ev ? !!src?.all_day : params.get('ganztag') === '1';
   const endShown = allDayInit ? addDays(end, -1) : end; // ganztägig: Enddatum inklusive
 
   // ---------- Felder ----------
   const err = h('div', { class: 'error', role: 'alert', hidden: true });
   const showErr = (m) => { err.textContent = m; err.hidden = false; err.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
 
-  const title = h('input', { class: 'input', value: src?.title || '', maxlength: 120, required: true, placeholder: 'z. B. Fußballtraining' });
+  const title = h('input', { class: 'input', value: src?.title || (!ev && params.get('titel')) || '', maxlength: 120, required: true, placeholder: 'z. B. Fußballtraining' });
   const allDay = h('input', { type: 'checkbox', checked: allDayInit, 'aria-label': 'Ganztägig' });
   const sDate = h('input', { class: 'input', type: 'date', value: toDateInput(start), required: true });
   const sTime = h('input', { class: 'input', type: 'time', value: toTimeInput(start) });
@@ -134,7 +138,8 @@ export async function eventEditView({ params }) {
   };
 
   // Personen
-  const chosen = new Set((ev?.event_participants || []).map((p) => p.user_id));
+  const chosen = new Set(ev ? (ev.event_participants || []).map((p) => p.user_id)
+    : (params.get('wer') || '').split(',').filter((u) => state.members.some((m) => m.user_id === u)));
   const peopleWrap = h('div');
   const drawPeople = () => {
     if (visibility === 'private') {
@@ -152,7 +157,7 @@ export async function eventEditView({ params }) {
   };
 
   // Wiederholung
-  const rule = parseRule(ev?.rrule);
+  const rule = parseRule(ev ? ev.rrule : params.get('wdh'));
   let repeat = 'none';
   if (rule) {
     if (rule.interval === 1) repeat = rule.freq;

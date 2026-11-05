@@ -894,3 +894,49 @@ h1 { font-weight: 700; }
 /* 2.0.1 – Beim Wischen nie seitlich überstehen (sonst zoomt das Handy heraus und die Leiste rutscht weg) */
 html { overflow-x: hidden; }
 #app { overflow-x: clip; }
+
+/* ---------- Sprachbefehl (ab 2.1.0) ---------- */
+.voice-fab {
+  position: fixed; z-index: 31; right: calc(max(20px, calc(50vw - 300px)) + 4px);
+  bottom: calc(var(--nav-h) + 26px + env(safe-area-inset-bottom));
+  width: 50px; height: 50px; border-radius: 50%; cursor: pointer;
+  display: grid; place-items: center; color: var(--accent-ink);
+  background: color-mix(in srgb, var(--card) 88%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 6px 18px rgba(23, 59, 99, .16);
+  transition: transform .15s ease;
+}
+.voice-fab:active { transform: scale(.92); }
+.voice-fab:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+/* Gibt es auf der Seite schon einen Plus-Knopf, sitzt das Mikrofon darüber */
+body:has(main .fab) .voice-fab { bottom: calc(var(--nav-h) + 26px + 58px + 14px + env(safe-area-inset-bottom)); }
+
+.voice-mic-wrap { display: grid; place-items: center; padding: 8px 0 4px; }
+.voice-mic {
+  width: 88px; height: 88px; border-radius: 50%; border: 0; cursor: pointer;
+  background: var(--accent); color: #fff; display: grid; place-items: center; position: relative;
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.voice-mic.on::before, .voice-mic.on::after {
+  content: ""; position: absolute; inset: 0; border-radius: 50%;
+  border: 3px solid var(--accent); animation: voice-ring 1.6s ease-out infinite;
+}
+.voice-mic.on::after { animation-delay: .8s; }
+@keyframes voice-ring { from { transform: scale(1); opacity: .7; } to { transform: scale(1.7); opacity: 0; } }
+.voice-status { text-align: center; min-height: 1.4em; margin: 10px 0; color: var(--muted); font-size: .92rem; }
+.voice-text { margin-bottom: 12px; resize: none; }
+.voice-examples { margin-top: 16px; }
+.voice-examples p { margin: 0 0 6px; }
+.voice-ex {
+  display: block; width: 100%; text-align: left; border: 0; cursor: pointer; margin-bottom: 6px;
+  background: var(--accent-soft); color: var(--text, inherit); border-radius: 12px; padding: 10px 12px; font: inherit; font-size: .9rem;
+}
+.voice-heard { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-bottom: 12px; }
+.voice-heard > span { flex: 1 1 100%; font-style: italic; }
+.voice-heard .link-btn { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px 2px 0; }
+.voice .seg { margin-bottom: 14px; }
+.voice-when { margin: 0 0 8px; font-weight: 600; color: var(--accent-ink); }
+.voice-times { margin-bottom: 14px; }
+.voice-times[hidden] { display: none; }
+@media (prefers-reduced-motion: reduce) { .voice-mic.on::before, .voice-mic.on::after { animation: none; opacity: .5; transform: scale(1.15); } }

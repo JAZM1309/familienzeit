@@ -15,6 +15,7 @@ import { forgetDevice, refreshPush } from './push.js';
 import { useAccount, forgetAccount, flush, onNetChange, net, sharedDevice } from './offline.js';
 import { lockEnabled, showLockScreen, watchBackground } from './lock.js';
 import { initGestures, setPageSwipe, takeEnter, setEnter, vibrate } from './gestures.js';
+import { voiceButton } from './voice.js';
 
 const root = document.getElementById('app');
 
@@ -204,7 +205,9 @@ function shell(path, content) {
 
   const enter = takeEnter();
   const main = h('main', { class: 'wrap with-nav' + (enter ? ` enter-${enter}` : '') }, content);
-  return h('div', null, top, netBanner(), main, bottom);
+  // Sprachbefehl in allen Hauptrubriken
+  const voice = SECTIONS.includes(parseHash().path) ? voiceButton() : null;
+  return h('div', null, top, netBanner(), main, voice, bottom);
 }
 
 // Hinweis bei fehlender Verbindung bzw. wartenden Änderungen

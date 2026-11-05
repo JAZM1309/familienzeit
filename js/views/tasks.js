@@ -244,11 +244,12 @@ export async function taskEditView({ params }) {
 
   const err = h('div', { class: 'error', role: 'alert', hidden: true });
   const showErr = (m) => { err.textContent = m; err.hidden = false; err.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
-  const title = h('input', { class: 'input', value: t?.title || '', maxlength: 120, placeholder: 'z. B. Müll rausbringen' });
+  const title = h('input', { class: 'input', value: t?.title || (!t && params.get('titel')) || '', maxlength: 120, placeholder: 'z. B. Müll rausbringen' });
   const description = h('textarea', { class: 'input', rows: 3, maxlength: 4000, placeholder: 'Optional' });
   description.value = t?.description || '';
 
-  const chosen = new Set(t ? assigneeIds(t) : []);
+  const chosen = new Set(t ? assigneeIds(t)
+    : (params.get('wer') || '').split(',').filter((u) => state.members.some((m) => m.user_id === u)));
   const people = h('div', { class: 'chips' }, state.members.map((m) => toggleChip(
     m.user_id === state.me.user_id ? 'Ich' : m.display_name, chosen.has(m.user_id),
     (on) => { if (on) chosen.add(m.user_id); else chosen.delete(m.user_id); }, avatar(m, 22, urlFor(m)))));
@@ -256,9 +257,10 @@ export async function taskEditView({ params }) {
   const dueDefault = params.get('datum') ? fromDateInput(params.get('datum')) : null;
   const dueStart = t?.due_at ? new Date(t.due_at) : dueDefault;
   const hasDue = h('input', { type: 'checkbox', checked: !!dueStart, 'aria-label': 'Fälligkeitsdatum' });
-  const hasTime = h('input', { type: 'checkbox', checked: !!(t?.due_at && !t.due_all_day), 'aria-label': 'Mit Uhrzeit' });
+  const timeParam = !t && /^\d{2}:\d{2}$/.test(params.get('zeit') || '') ? params.get('zeit') : null;
+  const hasTime = h('input', { type: 'checkbox', checked: !!(t?.due_at && !t.due_all_day) || !!(timeParam && dueStart), 'aria-label': 'Mit Uhrzeit' });
   const dDate = h('input', { class: 'input', type: 'date', value: toDateInput(dueStart || addDays(startOfDay(new Date()), 1)) });
-  const dTime = h('input', { class: 'input', type: 'time', value: t?.due_at && !t.due_all_day ? toTimeInput(new Date(t.due_at)) : '18:00' });
+  const dTime = h('input', { class: 'input', type: 'time', value: t?.due_at && !t.due_all_day ? toTimeInput(new Date(t.due_at)) : (timeParam || '18:00') });
   const dueBox = h('div');
   const reminders = new Set(t ? (t.task_reminders?.[0]?.offsets || []) : defaultReminders('task'));
   const remWrap = h('div');
@@ -284,7 +286,7 @@ export async function taskEditView({ params }) {
   hasTime.addEventListener('change', drawDue);
   drawDue();
 
-  let priority = t?.priority || 'normal';
+  let priority = t?.priority || (params.get('prio') === 'high' ? 'high' : 'normal');
   const prioSeg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Priorität' });
   const drawPrio = () => prioSeg.replaceChildren(...Object.entries(PRIORITY).map(([v, label]) =>
     h('button', { type: 'button', 'aria-pressed': String(v === priority), onClick: () => { priority = v; drawPrio(); } }, label)));
