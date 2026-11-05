@@ -480,6 +480,13 @@ export async function importEvents(items, participants, visibility, name, color)
   return check(await sb.rpc('import_events', { p_items: items, p_participants: participants, p_visibility: visibility, p_name: name, p_color: color }));
 }
 
+// Version 2.2.0: Kalenderdatei als Aufgaben (z. B. Abfallkalender)
+export async function importTasks(items, assignees, reminders, name, color) {
+  return check(await sb.rpc('import_tasks', {
+    p_items: items, p_assignees: assignees, p_reminders: reminders, p_name: name, p_color: color,
+  }));
+}
+
 export async function listImports() {
   return check(await sb.from('calendar_imports').select('*').order('created_at', { ascending: true }));
 }

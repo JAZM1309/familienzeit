@@ -5,7 +5,7 @@ import { startOfDay, addDays, toDateInput } from '../dates.js';
 import { expandAll } from '../recur.js';
 import { agendaItem } from '../events.js';
 import { notificationRow, openNotification } from './notifications.js';
-import { taskItem, assigneeIds } from './tasks.js';
+import { taskItem, assigneeIds, plannedLater } from './tasks.js';
 import { mealCard } from './meals.js';
 import { itemLabel } from '../shopping-parse.js';
 import { usageWarning } from '../backup.js';
@@ -237,7 +237,7 @@ export async function homeView() {
       const me = state.me.user_id;
       const soon = Date.now() + 3 * 86400000;
       openTasks = (await api.listTasks())
-        .filter((t) => t.status !== 'done' && (assigneeIds(t).includes(me) || assigneeIds(t).length === 0))
+        .filter((t) => t.status !== 'done' && !plannedLater(t) && (assigneeIds(t).includes(me) || assigneeIds(t).length === 0))
         .filter((t) => !t.due_at || new Date(t.due_at).getTime() < soon || t.priority === 'high')
         .sort((a, b) => (a.due_at ? new Date(a.due_at) : Infinity) - (b.due_at ? new Date(b.due_at) : Infinity))
         .slice(0, 5);
@@ -263,7 +263,7 @@ export async function homeView() {
       const ws = startOfWeek(now);
       const we = addDays(ws, 7);
       const [tasks, evs] = await Promise.all([api.listTasks(), api.eventsInRange(ws, we)]);
-      overview = overviewCard({ tasks, weekOccs: expandAll(evs, ws, we), now });
+      overview = overviewCard({ tasks: tasks.filter((t) => !plannedLater(t)), weekOccs: expandAll(evs, ws, we), now });
     } catch { /* egal */ }
   }
   const title = `${greeting(now)}, ${state.me.display_name}`;

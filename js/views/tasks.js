@@ -93,6 +93,16 @@ function group(tasks) {
     .filter(([, l]) => l.length);
 }
 
+// Aus einer Kalenderdatei importierte Aufgaben (z. B. Abfallkalender): nur die nächsten 7 Tage zeigen,
+// und verpasste nach anderthalb Tagen ausblenden – sonst wäre die Liste voll mit Terminen fürs ganze Jahr.
+const PLANNED_DAYS = 7;
+export function plannedLater(t, now = Date.now()) {
+  if (!t.import_id || !t.due_at || t.status === 'done') return false;
+  const due = new Date(t.due_at).getTime();
+  return due > now + PLANNED_DAYS * 86400000 || due < now - 36 * 3600000;
+}
+let showPlanned = false;
+
 // ---------- Liste ----------
 let filter = 'alle';
 
@@ -119,16 +129,23 @@ export async function tasksView() {
     if (filter === 'meine') list = list.filter((t) => assigneeIds(t).includes(me));
     if (filter === 'familie') list = list.filter((t) => assigneeIds(t).length === 0);
     list.sort(sortOpen);
+    const planned = list.filter((t) => plannedLater(t) && new Date(t.due_at) > new Date());
+    list = list.filter((t) => !plannedLater(t) || (showPlanned && planned.includes(t)));
+    const plannedRow = planned.length ? h('button', {
+      type: 'button', class: 'link-btn', style: { display: 'block', margin: '-4px auto 14px' },
+      onClick: () => { showPlanned = !showPlanned; draw(); },
+    }, showPlanned ? 'Geplante Aufgaben aus Kalendern ausblenden'
+      : `+ ${planned.length} geplante ${planned.length === 1 ? 'Aufgabe' : 'Aufgaben'} aus Kalendern (später als 7 Tage)`) : null;
     content.replaceChildren(...(list.length
-      ? group(list).map(([title, items]) => h('section', { class: 'card' },
+      ? [...group(list).map(([title, items]) => h('section', { class: 'card' },
         h('div', { class: 'section-title', style: { margin: '0 0 6px' } }, title),
-        items.map((t) => taskItem(t, render))))
+        items.map((t) => taskItem(t, render)))), plannedRow]
       : [emptyState({
         scene: 'fertig', title: 'Alles erledigt!',
         text: filter === 'meine' ? 'Dir ist gerade nichts zugewiesen. Genieß die freie Zeit.' : 'Keine offenen Aufgaben. Zeit für etwas Schönes.',
         action: h('button', { class: 'btn small accent', onClick: () => go('/aufgabe-bearbeiten') }, icon('plus', 18), 'Aufgabe anlegen'),
-      })]));
-    const n = tasks.filter((t) => t.status !== 'done').length;
+      }), plannedRow]));
+    const n = tasks.filter((t) => t.status !== 'done' && !plannedLater(t)).length;
     sub.textContent = n ? (n === 1 ? '1 Aufgabe offen' : `${n} Aufgaben offen`) : 'Alles erledigt';
   };
   draw();

@@ -3,8 +3,9 @@ import { h, icon, avatar, sheet, toast, field, busy, confirmDialog, fold } from 
 import * as api from '../api.js';
 import { state, urlFor, go, render } from '../app.js';
 import { icsToEvents } from '../ics.js';
-import { ruleText } from '../recur.js';
-import { fmtDayShort, fmtTime, fmtDateTime, toDateInput, addDays } from '../dates.js';
+import { ruleText, expandAll } from '../recur.js';
+import { fmtDayShort, fmtTime, fmtDateTime, toDateInput, addDays, startOfDay } from '../dates.js';
+import { defaultReminders } from '../settings.js';
 import { VISIBILITY } from '../events.js';
 import { exportSheet } from '../ics-share.js';
 
@@ -56,7 +57,7 @@ export function calendarMenu() {
   sheet('Kalender verbinden und exportieren', (close) => h('div', { class: 'quick-grid', style: { gridTemplateColumns: '1fr' } },
     h('button', { onClick: () => { close(); go('/kalender-import'); } },
       h('span', { class: 'card-icon' }, icon('download', 19)), h('strong', null, 'Kalenderdatei importieren'),
-      h('span', { class: 'muted small' }, 'Termine aus einer .ics-Datei einmalig übernehmen, z. B. aus dem Apple-Kalender oder einem Schulkalender.')),
+      h('span', { class: 'muted small' }, 'Termine aus einer .ics-Datei einmalig übernehmen, z. B. aus dem Apple-Kalender oder einem Schulkalender – oder als Aufgaben, z. B. einen Abfallkalender.')),
     h('button', { onClick: () => { close(); go('/kalender-abos'); } },
       h('span', { class: 'card-icon' }, icon('link', 19)), h('strong', null, 'Meine Kalender'),
       h('span', { class: 'muted small' }, 'Google- oder Outlook-Kalender abonnieren, Farben ändern, importierte Kalender verwalten.')),
@@ -100,8 +101,132 @@ export async function importView() {
       return;
     }
     if (!parsed.events.length) { toast('In der Datei sind keine aktuellen oder künftigen Termine.', { type: 'error' }); return; }
-    await showPreview(parsed, file.name);
+    // Abfallkalender o. ä. → direkt als Aufgaben vorschlagen
+    const wasteLike = /abfall|müll|muell|tonne|entsorg|abfuhr|wertstoff|sperrmüll/i.test(`${parsed.calName || ''} ${file.name} ${parsed.events.slice(0, 20).map((e) => e.title).join(' ')}`);
+    await choose(parsed, file.name, wasteLike ? 'tasks' : 'events');
   });
+
+  async function choose(parsed, fileName, mode) {
+    if (mode === 'tasks') await showTaskPreview(parsed, fileName);
+    else await showPreview(parsed, fileName);
+    const modeSeg = h('section', { class: 'card' },
+      h('div', { class: 'field', style: { marginBottom: 0 } }, h('label', null, 'Übernehmen als'),
+        seg([['events', 'Termine'], ['tasks', 'Aufgaben']], mode, (m) => { if (m !== mode) choose(parsed, fileName, m); }, 'Übernehmen als'),
+        h('div', { class: 'hint' }, mode === 'tasks'
+          ? 'Aus jedem Termin wird eine Aufgabe zum Abhaken – ideal für Abfallkalender („Tonne rausstellen“).'
+          : 'Die Termine erscheinen im Kalender.')));
+    body.firstChild.after(modeSeg);
+  }
+
+  // ---------- Als Aufgaben ----------
+  async function showTaskPreview({ calName, events }, fileName) {
+    const now = new Date();
+    const occs = expandAll(events.map((e, i) => ({ ...e, id: 'i' + i, event_exceptions: e.exceptions || [] })),
+      startOfDay(now), addDays(startOfDay(now), 400));
+    let when = 'eve';      // 'eve' = Vorabend, 'day' = Abholtag
+    let time = '18:00';
+    let suffix = true;     // „rausstellen“ anhängen
+    const people = new Set();
+    let reminders = [0];
+    let existingImports = [];
+    try { existingImports = await api.listImports(); } catch { /* egal */ }
+    let color = suggestColor(existingImports.map((i) => i.color));
+    const calNameInput = h('input', { class: 'input', value: calName || fileName.replace(/\.ics$/i, ''), maxlength: 60 });
+
+    const clean = (t) => t.replace(/^(?:abfuhr(?:termin)?|leerung|abholung|entsorgung)\s*[:\-–]?\s*/i, '').trim() || t;
+    // Abholungen am selben Tag werden zu einer Aufgabe zusammengefasst
+    const build = () => {
+      const byDue = new Map();
+      for (const o of occs) {
+        const day = startOfDay(o.start);
+        const [hh, mm] = time.split(':').map(Number);
+        const due = addDays(day, when === 'eve' ? -1 : 0);
+        due.setHours(hh || 0, mm || 0, 0, 0);
+        if (due < now) continue;
+        const k = due.getTime();
+        if (!byDue.has(k)) byDue.set(k, { due, pickup: day, names: [] });
+        const n = clean(o.title);
+        if (!byDue.get(k).names.includes(n)) byDue.get(k).names.push(n);
+      }
+      return [...byDue.values()].sort((a, b) => a.due - b.due).map((x) => ({
+        title: (x.names.join(' + ') + (suffix ? ' rausstellen' : '')).slice(0, 120),
+        description: `Abholung ${fmtDayShort(x.pickup)} ${x.pickup.getFullYear()}`,
+        due_at: x.due.toISOString(), due_all_day: false, due: x.due,
+      }));
+    };
+
+    let items = build();
+    const chosen = new Set(items.map((_, i) => i));
+    const count = h('span');
+    const submit = h('button', { class: 'btn teal block' }, icon('tasks', 18), count);
+    const list = h('div', { class: 'imp-list' });
+    const updateCount = () => { count.textContent = chosen.size === 1 ? '1 Aufgabe anlegen' : `${chosen.size} Aufgaben anlegen`; submit.disabled = chosen.size === 0; };
+    const drawList = () => {
+      items = build();
+      chosen.clear(); items.forEach((_, i) => chosen.add(i));
+      list.replaceChildren(...(items.length ? items.map((t, i) => h('label', { class: 'pick-row' },
+        h('input', { type: 'checkbox', checked: true, onChange: (ev) => { if (ev.target.checked) chosen.add(i); else chosen.delete(i); updateCount(); } }),
+        h('span', { class: 'grow' },
+          h('span', { class: 'imp-title' }, t.title),
+          h('span', { class: 'imp-sub' }, `fällig ${fmtDayShort(t.due)}, ${fmtTime(t.due)} · ${t.description}`))))
+        : [h('p', { class: 'muted small', style: { margin: 0 } }, 'In der Datei sind keine künftigen Termine.')]));
+      updateCount();
+    };
+
+    const timeInput = h('input', { class: 'input', type: 'time', value: time, 'aria-label': 'Uhrzeit' });
+    timeInput.addEventListener('change', () => { if (timeInput.value) { time = timeInput.value; drawList(); } });
+    const whenSeg = seg([['eve', 'Am Vorabend'], ['day', 'Am Abholtag']], when, (v) => {
+      when = v; time = v === 'eve' ? '18:00' : '06:00'; timeInput.value = time; drawList();
+    }, 'Fällig');
+    const suffixBox = h('input', { type: 'checkbox', checked: suffix, 'aria-label': '„rausstellen“ anhängen' });
+    suffixBox.addEventListener('change', () => { suffix = suffixBox.checked; drawList(); });
+
+    const peopleWrap = h('div', null,
+      h('div', { class: 'chips' }, state.members.map((m) => chip(m.user_id === state.me.user_id ? 'Ich' : m.display_name, false,
+        (on) => { if (on) people.add(m.user_id); else people.delete(m.user_id); }, avatar(m, 22, urlFor(m))))),
+      h('div', { class: 'hint' }, 'Niemand ausgewählt = Aufgabe für die ganze Familie, wer zuerst abhakt.'));
+
+    const remOptions = [[0, 'Bei Fälligkeit'], [60, '1 Std. vorher'], [-1, 'Keine']];
+    const remWrap = h('div', { class: 'chips' });
+    const drawRem = () => remWrap.replaceChildren(...remOptions.map(([v, l]) => h('button', {
+      type: 'button', class: 'fchip', 'aria-pressed': String(v === -1 ? reminders.length === 0 : reminders.includes(v)),
+      onClick: () => { reminders = v === -1 ? [] : [v]; drawRem(); },
+    }, l)));
+    const def = defaultReminders('task');
+    if (def.length) reminders = [def[0]];
+    drawRem();
+
+    submit.addEventListener('click', async () => {
+      const pick = items.filter((_, i) => chosen.has(i)).map(({ due, ...rest }) => rest);
+      busy(submit, true, 'Wird angelegt …');
+      try {
+        const res = await api.importTasks(pick, [...people], reminders, calNameInput.value.trim() || 'Importierte Aufgaben', color);
+        const n = typeof res === 'number' ? res : pick.length;
+        toast(n === 1 ? '1 Aufgabe angelegt.' : `${n} Aufgaben angelegt.`);
+        go('/aufgaben');
+      } catch (e) { toast(api.germanError(e), { type: 'error', duration: 6000 }); busy(submit, false); }
+    });
+
+    drawList();
+    body.replaceChildren(
+      h('section', { class: 'card' },
+        h('div', { class: 'card-head' }, h('div', { class: 'card-icon' }, icon('tasks', 19)),
+          h('h2', null, calName || fileName), h('button', { class: 'link-btn', onClick: () => body.replaceChildren(pickCard) }, 'Andere Datei')),
+        h('p', { class: 'muted small', style: { margin: 0 } },
+          `${items.length === 1 ? '1 Aufgabe' : items.length + ' Aufgaben'} ab heute (Abholungen am selben Tag sind zusammengefasst).`)),
+      h('section', { class: 'card' },
+        h('div', { class: 'field' }, h('label', null, 'Fällig'), whenSeg, h('div', { style: { marginTop: '8px' } }, timeInput)),
+        h('div', { class: 'switch-row', style: { marginBottom: 0 } }, h('span', null, '„rausstellen“ anhängen'), h('label', { class: 'toggle' }, suffixBox, h('span')))),
+      h('section', { class: 'card' },
+        h('div', { class: 'field' }, h('label', null, 'Wer'), peopleWrap),
+        h('div', { class: 'field', style: { marginBottom: 0 } }, h('label', null, 'Meine Erinnerung'), remWrap,
+          h('div', { class: 'hint' }, 'Gilt für dich. Die anderen können sich bei Bedarf eigene Erinnerungen einstellen.'))),
+      h('section', { class: 'card' },
+        field('Name', calNameInput),
+        h('div', { class: 'field', style: { marginBottom: 0 } }, h('label', null, 'Farbe in der Übersicht'), colorPicker(color, (c) => { color = c; }))),
+      h('section', { class: 'card' }, h('div', { class: 'card-head' }, h('h2', null, 'Aufgaben')), list),
+      submit);
+  }
 
   async function showPreview({ calName, events }, fileName) {
     // Mögliche Doppelte: gleiche Kennung oder gleicher Titel zur gleichen Zeit
@@ -294,15 +419,15 @@ function importCard(imp) {
   return h('section', { class: 'card' },
     h('div', { class: 'card-head' },
       h('span', { class: 'cal-dot', style: { background: imp.color } }),
-      h('h2', null, imp.name, ' ', h('span', { class: 'pill' }, 'Importiert'))),
+      h('h2', null, imp.name, ' ', h('span', { class: 'pill' }, imp.kind === 'tasks' ? 'Aufgaben' : 'Importiert'))),
     h('p', { class: 'muted small', style: { margin: '0 0 12px' } },
-      `${imp.event_count} ${imp.event_count === 1 ? 'Termin' : 'Termine'} · importiert am ${new Date(imp.created_at).toLocaleDateString('de-DE')}`),
+      `${imp.event_count} ${imp.kind === 'tasks' ? (imp.event_count === 1 ? 'Aufgabe' : 'Aufgaben') : (imp.event_count === 1 ? 'Termin' : 'Termine')} · importiert am ${new Date(imp.created_at).toLocaleDateString('de-DE')}`),
     h('div', { class: 'btn-row' },
       h('button', { class: 'btn ghost small', onClick: edit }, 'Name und Farbe'),
       h('button', {
         class: 'btn danger small',
         onClick: async () => {
-          if (!(await confirmDialog({ title: 'Kalender entfernen?', text: `Alle aus „${imp.name}“ importierten Termine werden aus Familienzeit gelöscht, auch für die anderen.`, ok: 'Entfernen', danger: true }))) return;
+          if (!(await confirmDialog({ title: 'Kalender entfernen?', text: `Alle aus „${imp.name}“ importierten ${imp.kind === 'tasks' ? 'Aufgaben' : 'Termine'} werden aus Familienzeit gelöscht, auch für die anderen.`, ok: 'Entfernen', danger: true }))) return;
           try { await api.deleteImport(imp.id); toast('Entfernt.'); render(); } catch (e) { toast(api.germanError(e), { type: 'error' }); }
         },
       }, 'Entfernen')));
@@ -380,7 +505,7 @@ export async function feedsView() {
     h('div', { class: 'section-title' }, 'Importiert'),
     ...(imports.length ? imports.map((imp) => fold({
       group: 'kalender', key: imp.id, title: imp.name, lead: h('span', { class: 'cal-dot', style: { background: imp.color } }),
-      summary: `Importiert · ${imp.event_count} Termine`, body: importCard(imp),
+      summary: imp.kind === 'tasks' ? `Aufgaben · ${imp.event_count}` : `Importiert · ${imp.event_count} Termine`, body: importCard(imp),
     })) : [h('div', { class: 'card', style: { textAlign: 'center' } },
       h('p', { class: 'muted', style: { marginTop: 0 } }, 'Noch keine Kalenderdatei importiert.'))]),
     h('button', { class: 'btn ghost block', style: { marginBottom: '14px' }, onClick: () => go('/kalender-import') }, icon('download', 18), 'Kalenderdatei importieren'));

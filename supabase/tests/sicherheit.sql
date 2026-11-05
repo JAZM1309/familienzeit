@@ -235,6 +235,29 @@ select t.ok((select public.can_edit_event(id) from public.events where external_
 select t.fails($$select public.import_events('[]', null, 'parents', 'x', '#123456')$$, 'Kind importiert als „Nur Eltern“');
 reset role;
 
+\echo '== Kalenderdatei als Aufgaben (2.2.0)'
+select t.als(t.id('A'));
+select t.fails($$select public.import_tasks('[]', null, null, 'x', 'red')$$, 'Ungültige Farbe beim Aufgaben-Import');
+select t.fails($$select public.import_tasks('[{"title":"Tonne","due_at":"2026-12-01T17:00:00Z"}]', array['99999999-9999-9999-9999-999999999999'::uuid], null, 'x', '#123456')$$,
+  'Aufgaben-Import an familienfremde Person');
+select t.ok(public.import_tasks('[{"title":"Gelbe Tonne rausstellen","due_at":"2026-12-01T17:00:00Z"},{"title":"Papier rausstellen","due_at":"2026-12-08T17:00:00Z"}]',
+  null, array[0], 'Abfallkalender', '#3F9C4F') = 2, 'Admin importiert 2 Aufgaben');
+select t.ok(t.n($$select * from public.tasks where import_id is not null$$) = 2, 'Importierte Aufgaben sind sichtbar');
+select t.ok(t.n($$select * from public.task_reminders r join public.tasks x on x.id = r.task_id where x.import_id is not null and r.user_id = auth.uid()$$) = 2,
+  'Erinnerungen für den Importierenden gesetzt');
+select t.merke('imp_tasks', (select id::text from public.calendar_imports where kind = 'tasks'));
+reset role;
+select t.ok((select count(*) from public.notifications where title like 'Neue Aufgabe: %rausstellen') = 0, 'Keine Einzelmeldung je importierter Aufgabe');
+select t.ok((select count(*) > 0 from public.notifications where title = '2 Aufgaben importiert'), 'Eine Sammelmeldung an die anderen');
+select t.als(t.id('C'));
+select t.ok(t.n($$select * from public.tasks where import_id is not null$$) = 2, 'Kind sieht importierte Familienaufgaben');
+select t.fails(format($$select public.delete_import(%L)$$, t.v('imp_tasks')), 'Kind entfernt fremden Aufgaben-Import');
+reset role;
+select t.als(t.id('A'));
+select public.delete_import(t.id('imp_tasks'));
+select t.ok(t.n($$select * from public.tasks where import_id is not null$$) = 0, 'Import entfernen löscht seine Aufgaben');
+reset role;
+
 \echo '== Dateien und Speicher'
 select t.als(t.id('C'));
 select t.fails($$insert into storage.objects (bucket_id, name) values ('familie', public.my_family() || '/avatars/' || t.v('A') || '.webp')$$,
