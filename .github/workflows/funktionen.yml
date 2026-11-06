@@ -37,3 +37,6 @@ jobs:
 
       - name: Passwort-Funktion veröffentlichen
         run: supabase functions deploy passwort --project-ref "$PROJECT_REF" --no-verify-jwt --yes
+
+      - name: Kalender-Funktion (Widgets und Abo) veröffentlichen
+        run: supabase functions deploy kalender --project-ref "$PROJECT_REF" --no-verify-jwt --yes

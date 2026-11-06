@@ -1,0 +1,227 @@
+// Familienzeit-Widget für die iPhone-App „Scriptable“ (kostenlos im App Store).
+// Größen: klein/mittel = nächste Termine · groß = Monatskalender + nächste Termine
+// Widget-Parameter (Widget lange drücken → Widget bearbeiten → Parameter):
+//   liste  = auch das große Widget zeigt nur die Terminliste
+//   monat  = Monatskalender (nur groß)
+// Der Link unten ist persönlich – das Skript nicht weitergeben.
+
+const LINK = '__FZ_LINK__';
+const APP = '__FZ_APP__';
+
+const C = {
+  bg: Color.dynamic(new Color('#F5F7FA'), new Color('#0E1824')),
+  card: Color.dynamic(new Color('#FFFFFF'), new Color('#16243A')),
+  text: Color.dynamic(new Color('#263445'), new Color('#E6EDF5')),
+  muted: Color.dynamic(new Color('#66768A'), new Color('#95A5BA')),
+  accent: Color.dynamic(new Color('#173B63'), new Color('#3A79BD')),
+  today: new Color('#27A99A'),
+  line: Color.dynamic(new Color('#E2E8F0'), new Color('#253852')),
+};
+const WD = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+const MONTHS = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+
+// ---------- Daten laden (mit Zwischenspeicher für unterwegs ohne Netz) ----------
+async function load() {
+  const fm = FileManager.local();
+  const file = fm.joinPath(fm.cacheDirectory(), 'familienzeit-widget.json');
+  try {
+    const req = new Request(LINK + '&tage=45&anzahl=12');
+    req.timeoutInterval = 15;
+    const data = await req.loadJSON();
+    if (req.response.statusCode !== 200 || !data.events) throw new Error(String(req.response.statusCode));
+    fm.writeString(file, JSON.stringify(data));
+    return { data, offline: false };
+  } catch (e) {
+    if (fm.fileExists(file)) return { data: JSON.parse(fm.readString(file)), offline: true };
+    return { error: 'Keine Verbindung oder Link ungültig. In Familienzeit unter „Widgets & Kalender-Abo“ prüfen.' };
+  }
+}
+
+// ---------- Bausteine ----------
+function text(stack, value, size, { bold = false, color = C.text, lines = 1, scale = 0.8 } = {}) {
+  const t = stack.addText(value);
+  t.font = bold ? Font.semiboldSystemFont(size) : Font.systemFont(size);
+  t.textColor = color;
+  t.lineLimit = lines;
+  t.minimumScaleFactor = scale;
+  return t;
+}
+
+function bar(stack, colors, height) {
+  const b = stack.addStack();
+  b.layoutVertically();
+  b.size = new Size(4, height);
+  b.cornerRadius = 2;
+  for (const c of colors.slice(0, 3)) {
+    const s = b.addStack();
+    s.size = new Size(4, height / Math.min(colors.length, 3));
+    s.backgroundColor = new Color(c);
+  }
+}
+
+function header(w, data, offline, title) {
+  const row = w.addStack();
+  row.centerAlignContent();
+  text(row, title, 13, { bold: true, color: C.accent });
+  row.addSpacer();
+  if (offline) text(row, 'offline', 10, { color: C.muted });
+}
+
+function eventRow(stack, e, compact) {
+  const row = stack.addStack();
+  row.centerAlignContent();
+  bar(row, e.colors, compact ? 26 : 30);
+  row.addSpacer(7);
+  const col = row.addStack();
+  col.layoutVertically();
+  text(col, e.title, compact ? 13 : 14, { bold: true });
+  const sub = e.location ? `${e.when} · ${e.location}` : e.when;
+  text(col, sub, compact ? 11 : 12, { color: C.muted });
+  row.addSpacer();
+}
+
+function list(w, data, max, compact) {
+  const items = data.next.slice(0, max);
+  if (!items.length) {
+    w.addSpacer();
+    text(w, 'Keine anstehenden Termine 🎉', 13, { color: C.muted, lines: 2 });
+    w.addSpacer();
+    return;
+  }
+  for (let i = 0; i < items.length; i++) {
+    if (i) w.addSpacer(compact ? 5 : 7);
+    eventRow(w, items[i], compact);
+  }
+}
+
+// Monatskalender mit farbigen Punkten
+function month(w, data) {
+  const [y, m, d] = data.today.split('-').map(Number);
+  const first = new Date(Date.UTC(y, m - 1, 1));
+  const daysIn = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const offset = (first.getUTCDay() + 6) % 7;
+  const rows = Math.ceil((offset + daysIn) / 7);
+
+  // Farben je Tag sammeln (mehrtägige Termine an jedem Tag)
+  const byDay = new Map();
+  for (const e of data.events) {
+    let cur = new Date(e.day + 'T00:00:00Z');
+    const last = new Date(e.endDay + 'T00:00:00Z');
+    for (let n = 0; cur <= last && n < 40; n++, cur = new Date(cur.getTime() + 86400000)) {
+      const k = cur.toISOString().slice(0, 10);
+      const list = byDay.get(k) || [];
+      for (const c of e.colors) if (!list.includes(c)) list.push(c);
+      byDay.set(k, list);
+    }
+  }
+
+  const cellW = 42, cellH = rows > 5 ? 24 : 28;
+  const head = w.addStack();
+  for (const wd of WD) {
+    const c = head.addStack();
+    c.size = new Size(cellW, 14);
+    c.centerAlignContent();
+    text(c, wd, 10, { color: C.muted });
+  }
+  w.addSpacer(2);
+  for (let r = 0; r < rows; r++) {
+    const row = w.addStack();
+    for (let c = 0; c < 7; c++) {
+      const n = r * 7 + c - offset + 1;
+      const cell = row.addStack();
+      cell.size = new Size(cellW, cellH);
+      cell.layoutVertically();
+      cell.centerAlignContent();
+      if (n < 1 || n > daysIn) continue;
+      const key = `${y}-${String(m).padStart(2, '0')}-${String(n).padStart(2, '0')}`;
+      const numRow = cell.addStack();
+      numRow.addSpacer();
+      const num = numRow.addStack();
+      num.size = new Size(20, 18);
+      num.centerAlignContent();
+      num.cornerRadius = 9;
+      if (n === d) num.backgroundColor = C.today;
+      text(num, String(n), 11, { bold: n === d, color: n === d ? Color.white() : (c > 4 ? C.muted : C.text), scale: 1 });
+      numRow.addSpacer();
+      const dots = cell.addStack();
+      dots.addSpacer();
+      for (const col of (byDay.get(key) || []).slice(0, 3)) {
+        const dot = dots.addStack();
+        dot.size = new Size(5, 5);
+        dot.cornerRadius = 2.5;
+        dot.backgroundColor = new Color(col);
+        dots.addSpacer(2);
+      }
+      dots.addSpacer();
+    }
+  }
+}
+
+// ---------- Widget bauen ----------
+async function build() {
+  const fam = config.widgetFamily || 'large';
+  const param = (args.widgetParameter || '').toLowerCase();
+  const w = new ListWidget();
+  w.backgroundColor = C.bg;
+  w.url = APP + '#/kalender';
+  w.refreshAfterDate = new Date(Date.now() + 15 * 60000);
+
+  const { data, offline, error } = await load();
+
+  // Sperrbildschirm
+  if (fam.startsWith('accessory')) {
+    const e = data?.next?.[0];
+    if (fam === 'accessoryRectangular') {
+      text(w, e ? e.title : 'Keine Termine', 13, { bold: true, color: Color.white() });
+      if (e) text(w, e.when, 12, { color: Color.white() });
+    } else {
+      text(w, e ? e.time || '📅' : '–', 12, { color: Color.white() });
+    }
+    return w;
+  }
+
+  if (error) {
+    w.setPadding(14, 14, 14, 14);
+    header(w, null, false, 'Familienzeit');
+    w.addSpacer(6);
+    text(w, error, 12, { color: C.muted, lines: 4 });
+    return w;
+  }
+
+  if (fam === 'small') {
+    w.setPadding(12, 12, 12, 12);
+    header(w, data, offline, 'Termine');
+    w.addSpacer(8);
+    list(w, data, 3, true);
+    w.addSpacer();
+  } else if (fam === 'medium') {
+    w.setPadding(12, 14, 12, 14);
+    header(w, data, offline, 'Nächste Termine');
+    w.addSpacer(8);
+    list(w, data, 3, true);
+    w.addSpacer();
+  } else if (param === 'liste') {
+    w.setPadding(14, 14, 14, 14);
+    header(w, data, offline, 'Nächste Termine');
+    w.addSpacer(10);
+    list(w, data, 7, false);
+    w.addSpacer();
+  } else {
+    w.setPadding(12, 12, 12, 12);
+    const [y, m] = data.today.split('-').map(Number);
+    header(w, data, offline, `${MONTHS[m - 1]} ${y}`);
+    w.addSpacer(6);
+    month(w, data);
+    if (param !== 'monat') {
+      w.addSpacer(8);
+      list(w, data, 2, true);
+    }
+    w.addSpacer();
+  }
+  return w;
+}
+
+const widget = await build();
+if (config.runsInWidget) Script.setWidget(widget);
+else await widget.presentLarge();
+Script.complete();

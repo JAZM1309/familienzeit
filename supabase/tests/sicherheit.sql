@@ -331,5 +331,40 @@ select t.fails(format($$insert into storage.objects (bucket_id, name) values ('f
   'Admin lädt Anhang eines privaten Termins hoch');
 reset role;
 
+\echo '== Widgets und Kalender-Abo'
+select t.als(null);
+select t.fails($$select public.renew_widget_token()$$, 'Gast erzeugt Widget-Link');
+select t.fails($$select public.widget_data('x', now(), now())$$, 'Gast ruft Widget-Daten ab');
+reset role;
+select t.als(t.id('C'));
+select t.merke('wt_c', public.renew_widget_token());
+select t.ok(t.n('select user_id from public.widget_tokens') = 1, 'Kind sieht nur den eigenen Widget-Link');
+select t.fails($$select token_hash from public.widget_tokens$$, 'Kind liest den Hash des Links');
+select t.fails($$select public.widget_data(t.v('wt_c'), now(), now())$$, 'Angemeldet: Widget-Daten nur über die Server-Funktion');
+reset role;
+select t.als(t.id('A'));
+select t.merke('wt_a', public.renew_widget_token());
+select t.ok(t.n('select user_id from public.widget_tokens') = 1, 'Admin sieht fremde Widget-Links nicht');
+reset role;
+-- Die Server-Funktion (ohne Rolle) liefert genau, was die Person in der App sieht
+select t.ok((select count(*) from jsonb_array_elements(public.widget_data(t.v('wt_c'), '2026-11-01', '2027-01-01') -> 'events') e
+             where e ->> 'title' = 'Geheim') = 1, 'Widget: Kind sieht den eigenen privaten Termin');
+select t.ok((select count(*) from jsonb_array_elements(public.widget_data(t.v('wt_c'), '2026-11-01', '2027-01-01') -> 'events') e
+             where e ->> 'title' = 'Elternsache') = 0, 'Widget: Kind sieht keine Eltern-Termine');
+select t.ok((select count(*) from jsonb_array_elements(public.widget_data(t.v('wt_a'), '2026-11-01', '2027-01-01') -> 'events') e
+             where e ->> 'title' = 'Geheim') = 0, 'Widget: Admin sieht den privaten Kindertermin nicht');
+select t.ok((select count(*) from jsonb_array_elements(public.widget_data(t.v('wt_a'), '2026-11-01', '2027-01-01') -> 'events') e
+             where e ->> 'title' = 'Elternsache') = 1, 'Widget: Admin sieht Eltern-Termine');
+select t.ok(public.widget_data(repeat('0', 48), now(), now()) is null, 'Widget: falscher Link liefert nichts');
+select t.als(t.id('C'));
+select t.merke('wt_c2', public.renew_widget_token());
+reset role;
+select t.ok(public.widget_data(t.v('wt_c'), now(), now()) is null, 'Widget: alter Link ist nach dem Erneuern ungültig');
+select t.ok(public.widget_data(t.v('wt_c2'), now(), now()) is not null, 'Widget: neuer Link funktioniert');
+select t.als(t.id('C'));
+select public.delete_widget_token();
+reset role;
+select t.ok(public.widget_data(t.v('wt_c2'), now(), now()) is null, 'Widget: abgeschalteter Link liefert nichts');
+
 \echo ''
 \echo '✓ Alle Sicherheitstests bestanden.'

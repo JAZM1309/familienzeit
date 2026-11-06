@@ -584,3 +584,17 @@ export async function setPasswordWithReset(token, password) {
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw Object.assign(new Error(body.error || 'Das hat nicht geklappt.'), { user: true });
 }
+
+// Version 2.3.0: persönlicher Link für Widgets und Kalender-Abo
+export async function widgetTokenInfo() {
+  const rows = check(await sb.from('widget_tokens').select('user_id, created_at, last_used_at'));
+  return rows?.[0] || null;
+}
+
+export async function renewWidgetToken() {
+  return check(await sb.rpc('renew_widget_token'));
+}
+
+export async function deleteWidgetToken() {
+  return check(await sb.rpc('delete_widget_token'));
+}

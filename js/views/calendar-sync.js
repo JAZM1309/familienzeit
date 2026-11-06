@@ -63,7 +63,10 @@ export function calendarMenu() {
       h('span', { class: 'muted small' }, 'Google- oder Outlook-Kalender abonnieren, Farben ändern, importierte Kalender verwalten.')),
     h('button', { onClick: () => { close(); exportSheet(); } },
       h('span', { class: 'card-icon' }, icon('share', 19)), h('strong', null, 'Termine exportieren'),
-      h('span', { class: 'muted small' }, 'Als Kalenderdatei (.ics) für iPhone, Google, Outlook – z. B. alle Termine, die du eingetragen hast.'))));
+      h('span', { class: 'muted small' }, 'Als Kalenderdatei (.ics) für iPhone, Google, Outlook – z. B. alle Termine, die du eingetragen hast.')),
+    h('button', { onClick: () => { close(); go('/kalender-widget'); } },
+      h('span', { class: 'card-icon' }, icon('calendar', 19)), h('strong', null, 'Widgets & Kalender-Abo'),
+      h('span', { class: 'muted small' }, 'Termine als Widget auf dem Startbildschirm und den Familienkalender im Handy-Kalender – immer aktuell.'))));
 }
 
 // ---------- Import ----------
