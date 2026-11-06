@@ -106,23 +106,25 @@ export async function importView() {
     if (!parsed.events.length) { toast('In der Datei sind keine aktuellen oder künftigen Termine.', { type: 'error' }); return; }
     // Abfallkalender o. ä. → direkt als Aufgaben vorschlagen
     const wasteLike = /abfall|müll|muell|tonne|entsorg|abfuhr|wertstoff|sperrmüll/i.test(`${parsed.calName || ''} ${file.name} ${parsed.events.slice(0, 20).map((e) => e.title).join(' ')}`);
-    await choose(parsed, file.name, wasteLike ? 'tasks' : 'events');
+    await choose(parsed, file.name, wasteLike ? 'both' : 'events');
   });
 
   async function choose(parsed, fileName, mode) {
-    if (mode === 'tasks') await showTaskPreview(parsed, fileName);
-    else await showPreview(parsed, fileName);
+    if (mode === 'events') await showPreview(parsed, fileName);
+    else await showTaskPreview(parsed, fileName, mode === 'both');
     const modeSeg = h('section', { class: 'card' },
       h('div', { class: 'field', style: { marginBottom: 0 } }, h('label', null, 'Übernehmen als'),
-        seg([['events', 'Termine'], ['tasks', 'Aufgaben']], mode, (m) => { if (m !== mode) choose(parsed, fileName, m); }, 'Übernehmen als'),
+        seg([['events', 'Termine'], ['tasks', 'Aufgaben'], ['both', 'Beides']], mode, (m) => { if (m !== mode) choose(parsed, fileName, m); }, 'Übernehmen als'),
         h('div', { class: 'hint' }, mode === 'tasks'
           ? 'Aus jedem Termin wird eine Aufgabe zum Abhaken – ideal für Abfallkalender („Tonne rausstellen“).'
-          : 'Die Termine erscheinen im Kalender.')));
+          : mode === 'both'
+            ? 'Die Termine erscheinen im Kalender, und zusätzlich entsteht je Termin eine Aufgabe zum Abhaken (z. B. „Tonne rausstellen“ am Vorabend).'
+            : 'Die Termine erscheinen im Kalender.')));
     body.firstChild.after(modeSeg);
   }
 
   // ---------- Als Aufgaben ----------
-  async function showTaskPreview({ calName, events }, fileName) {
+  async function showTaskPreview({ calName, events }, fileName, alsoEvents = false) {
     const now = new Date();
     const occs = expandAll(events.map((e, i) => ({ ...e, id: 'i' + i, event_exceptions: e.exceptions || [] })),
       startOfDay(now), addDays(startOfDay(now), 400));
@@ -135,6 +137,24 @@ export async function importView() {
     try { existingImports = await api.listImports(); } catch { /* egal */ }
     let color = suggestColor(existingImports.map((i) => i.color));
     const calNameInput = h('input', { class: 'input', value: calName || fileName.replace(/\.ics$/i, ''), maxlength: 60 });
+
+    // „Beides“: die Termine zusätzlich in den Kalender (ohne schon vorhandene)
+    let calEvents = [];
+    if (alsoEvents) {
+      let existing = [];
+      try {
+        const starts = events.map((e) => new Date(e.starts_at).getTime());
+        const from = new Date(Math.max(Math.min(...starts), Date.now() - 400 * 86400000));
+        const to = addDays(new Date(Math.max(...events.map((e) => new Date(e.ends_at).getTime()))), 1);
+        existing = await api.eventsInRange(from, to);
+      } catch { /* ohne Prüfung weiter */ }
+      const uids = new Set(existing.map((e) => e.external_uid).filter(Boolean));
+      const pairs = new Set(existing.map((e) => `${e.title.trim().toLowerCase()}|${new Date(e.starts_at).getTime()}`));
+      calEvents = events
+        .filter((e) => !uids.has(e.external_uid) && !pairs.has(`${e.title.trim().toLowerCase()}|${new Date(e.starts_at).getTime()}`))
+        .map(({ recurring, ...rest }) => rest);
+    }
+    const skipped = alsoEvents ? events.length - calEvents.length : 0;
 
     const clean = (t) => t.replace(/^(?:abfuhr(?:termin)?|leerung|abholung|entsorgung)\s*[:\-–]?\s*/i, '').trim() || t;
     // Abholungen am selben Tag werden zu einer Aufgabe zusammengefasst
@@ -163,7 +183,12 @@ export async function importView() {
     const count = h('span');
     const submit = h('button', { class: 'btn teal block' }, icon('tasks', 18), count);
     const list = h('div', { class: 'imp-list' });
-    const updateCount = () => { count.textContent = chosen.size === 1 ? '1 Aufgabe anlegen' : `${chosen.size} Aufgaben anlegen`; submit.disabled = chosen.size === 0; };
+    const updateCount = () => {
+      const t = chosen.size === 1 ? '1 Aufgabe' : `${chosen.size} Aufgaben`;
+      const e = calEvents.length === 1 ? '1 Termin' : `${calEvents.length} Termine`;
+      count.textContent = alsoEvents && calEvents.length ? `${t} + ${e} anlegen` : `${t} anlegen`;
+      submit.disabled = chosen.size === 0 && !(alsoEvents && calEvents.length);
+    };
     const drawList = () => {
       items = build();
       chosen.clear(); items.forEach((_, i) => chosen.add(i));
@@ -202,12 +227,30 @@ export async function importView() {
     submit.addEventListener('click', async () => {
       const pick = items.filter((_, i) => chosen.has(i)).map(({ due, ...rest }) => rest);
       busy(submit, true, 'Wird angelegt …');
+      const name = calNameInput.value.trim() || (alsoEvents ? 'Importierter Kalender' : 'Importierte Aufgaben');
+      let n = 0;
+      let done = false;
       try {
-        const res = await api.importTasks(pick, [...people], reminders, calNameInput.value.trim() || 'Importierte Aufgaben', color);
-        const n = typeof res === 'number' ? res : pick.length;
-        toast(n === 1 ? '1 Aufgabe angelegt.' : `${n} Aufgaben angelegt.`);
-        go('/aufgaben');
-      } catch (e) { toast(api.germanError(e), { type: 'error', duration: 6000 }); busy(submit, false); }
+        if (pick.length) {
+          const res = await api.importTasks(pick, [...people], reminders, name, color);
+          n = typeof res === 'number' ? res : pick.length;
+        }
+        done = true;
+        let m = 0;
+        if (alsoEvents && calEvents.length) m = await api.importEvents(calEvents, [], 'family', name, color);
+        const tt = n === 1 ? '1 Aufgabe' : `${n} Aufgaben`;
+        const et = m === 1 ? '1 Termin' : `${m} Termine`;
+        toast(alsoEvents ? `${tt} und ${et} angelegt.` : `${tt} angelegt.`);
+        go(alsoEvents && !pick.length ? '/kalender' : '/aufgaben');
+      } catch (e) {
+        // Aufgaben sind schon da, nur die Termine fehlen → nicht noch einmal anlegen
+        if (done) {
+          toast(`${n === 1 ? '1 Aufgabe' : n + ' Aufgaben'} angelegt, aber die Termine konnten nicht importiert werden: ${api.germanError(e)} Bitte die Datei noch einmal als „Termine“ importieren.`, { type: 'error', duration: 9000 });
+          go('/aufgaben');
+          return;
+        }
+        toast(api.germanError(e), { type: 'error', duration: 6000 }); busy(submit, false);
+      }
     });
 
     drawList();
@@ -227,6 +270,12 @@ export async function importView() {
       h('section', { class: 'card' },
         field('Name', calNameInput),
         h('div', { class: 'field', style: { marginBottom: 0 } }, h('label', null, 'Farbe in der Übersicht'), colorPicker(color, (c) => { color = c; }))),
+      alsoEvents ? h('section', { class: 'card' },
+        h('div', { class: 'card-head' }, h('div', { class: 'card-icon' }, icon('calendar', 19)), h('h2', null, 'Im Kalender')),
+        h('p', { class: 'small', style: { margin: 0 } }, calEvents.length
+          ? `${calEvents.length === 1 ? '1 Termin kommt' : calEvents.length + ' Termine kommen'} in den Familienkalender – mit dem Namen und der Farbe von oben, sichtbar für alle.`
+          : 'Alle Termine sind schon im Kalender – es werden nur die Aufgaben angelegt.'),
+        skipped && calEvents.length ? h('p', { class: 'muted small', style: { margin: '6px 0 0' } }, `${skipped} schon vorhandene Termine werden übersprungen.`) : null) : null,
       h('section', { class: 'card' }, h('div', { class: 'card-head' }, h('h2', null, 'Aufgaben')), list),
       submit);
   }
