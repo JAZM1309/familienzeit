@@ -53,6 +53,18 @@ function hScrollable(el, stop) {
   return false;
 }
 
+// Liegt der Finger in einem eigenen senkrechten Scrollbereich (z. B. Tagesansicht),
+// der nicht ganz oben steht? Dann scrollt dieser Bereich – kein „Aktualisieren“.
+function innerScrolled(el) {
+  for (let n = el; n && n !== document.body && n !== document.documentElement; n = n.parentElement) {
+    if (n.scrollTop > 0) {
+      const s = getComputedStyle(n);
+      if (s.overflowY === 'auto' || s.overflowY === 'scroll') return true;
+    }
+  }
+  return false;
+}
+
 let ptr; // Anzeige "Aktualisieren"
 function ptrEl() {
   if (!ptr) {
@@ -92,7 +104,7 @@ export function initGestures({ refresh }) {
     g = {
       mode, el, handlers, x0: t.clientX, y0: t.clientY, t0: Date.now(), dx: 0, dy: 0, axis: null,
       noX: !!typing || hScrollable(target, el) || mode === 'sheet',
-      atTop: window.scrollY <= 0, sheetTop: sheetEl ? sheetEl.scrollTop <= 0 : false,
+      atTop: window.scrollY <= 0 && !innerScrolled(target), sheetTop: sheetEl ? sheetEl.scrollTop <= 0 : false,
     };
   }, { passive: true });
 
@@ -127,7 +139,7 @@ export function initGestures({ refresh }) {
         e.preventDefault();
         g.el.style.transition = 'none';
         g.el.style.transform = `translateY(${g.dy}px)`;
-      } else if (g.mode !== 'sheet' && g.atTop && window.scrollY <= 0) {
+      } else if (g.mode !== 'sheet' && g.atTop && window.scrollY <= 0 && !innerScrolled(e.target)) {
         e.preventDefault();
         g.ptr = true;
         const p = ptrEl();

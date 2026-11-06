@@ -813,7 +813,7 @@ h1 { font-weight: 700; }
 .tl-allday { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .tl-ad { border: 0; cursor: pointer; padding: 5px 10px; border-radius: 10px; font-size: .82rem; font-weight: 600; color: var(--text);
   background: color-mix(in srgb, var(--c) 18%, var(--card)); border-left: 4px solid var(--c); }
-.tl-scroll { position: relative; display: grid; grid-template-columns: 46px 1fr; max-height: 62vh; overflow-y: auto; margin: 0 -6px; padding: 6px 6px 0; scroll-behavior: smooth; }
+.tl-scroll { position: relative; display: grid; grid-template-columns: 46px 1fr; max-height: 62vh; overflow-y: auto; overscroll-behavior: contain; margin: 0 -6px; padding: 6px 6px 0; scroll-behavior: smooth; }
 .tl-grid { position: relative; }
 .tl-hour { position: absolute; left: -46px; right: 0; border: 0; border-top: 1px solid var(--line); background: none; padding: 0; cursor: pointer; text-align: left; }
 .tl-hour:hover { background: color-mix(in srgb, var(--accent) 5%, transparent); }
