@@ -90,11 +90,13 @@ export async function widgetView() {
     h('p', { class: 'muted small', style: { margin: 0 } }, 'Klappt der Knopf nicht: Einstellungen → Kalender → Accounts → Account hinzufügen → Andere → Kalenderabo hinzufügen und den Link unten einfügen.'));
 
   const androidCal = h('div', null,
-    steps(h('span', null, 'Die kostenlose App ', h('strong', null, 'ICSx⁵'), ' aus dem Play Store installieren.'),
-      'Link unten kopieren, in ICSx⁵ auf „+“ tippen und einfügen. Name z. B. „Familienzeit“.',
-      'In ICSx⁵ unter Einstellungen die Synchronisierung auf „Alle 15 Minuten“ stellen.',
-      'Fertig: Die Termine erscheinen im Kalender des Handys (Google Kalender, Samsung Kalender …) und in dessen Widgets, z. B. Monatsansicht oder Terminliste.'),
-    h('p', { class: 'muted small', style: { margin: 0 } }, 'Den Link besser nicht direkt im Google Kalender (Web) abonnieren – Google aktualisiert solche Abos oft nur alle 12 bis 24 Stunden.'));
+    h('button', { class: 'btn teal block', style: { marginBottom: '12px' }, onClick: () => copy(icsUrl(token), 'Kalender-Link kopiert.') }, icon('copy', 18), 'Kalender-Link kopieren'),
+    steps('Link kopieren und dir z. B. per Mail an den PC schicken – das Abonnieren geht nur auf der Google-Kalender-Webseite.',
+      'Am PC calendar.google.com öffnen (mit dem Google-Konto des Handys).',
+      'Links bei „Weitere Kalender“ auf „+“ → „Per URL“ → Link einfügen → „Kalender hinzufügen“.',
+      'Am Handy in der Google-Kalender-App ☰ → Einstellungen → den neuen Kalender antippen → „Synchronisieren“ einschalten.',
+      'Fertig: Die Termine erscheinen im Google Kalender und in seinen Widgets (Startbildschirm lange drücken → Widgets → Google Kalender: Monat oder Terminübersicht).'),
+    h('p', { class: 'muted small', style: { margin: 0 } }, 'Wichtig: Google holt Änderungen nur alle paar Stunden ab, manchmal erst nach einem Tag. Für ganz aktuelle Termine also immer in Familienzeit schauen.'));
 
   const icsLink = h('div', null,
     linkBox(icsUrl(token)),
@@ -124,19 +126,6 @@ export async function widgetView() {
       'Unter „Parameter“ kannst du beim großen Widget „liste“ (nur Termine) oder „monat“ (nur Kalender) eintragen. ',
       'Auch als Sperrbildschirm-Widget nutzbar. Das Widget aktualisiert sich etwa alle 15 Minuten (iOS entscheidet den genauen Zeitpunkt).'));
 
-  // ---------- Widget Android (KWGT, optional) ----------
-  const jsonUrl = baseUrl(token) + '&anzahl=5';
-  const formula = `$wg("${jsonUrl}", json, ".next[0].line")$`;
-  const androidWidget = h('div', null,
-    h('p', { class: 'small', style: { marginTop: 0 } },
-      'Am einfachsten nimmst du das Kalender-Abo oben mit ICSx⁵ – dann funktionieren alle Kalender-Widgets deines Handys. Für ein eigenes Design geht es mit der App KWGT:'),
-    steps('KWGT installieren, ein leeres Widget anlegen und ein Textfeld hinzufügen.',
-      'Als Text die Formel unten einfügen. Für den zweiten Termin „next[1]“ statt „next[0]“ verwenden, für die Farbe „.next[0].colors[0]“.'),
-    linkBox(formula),
-    h('div', { class: 'btn-row' },
-      h('button', { class: 'btn ghost small', onClick: () => copy(formula, 'Formel kopiert.') }, icon('copy', 16), 'Formel kopieren'),
-      h('button', { class: 'btn ghost small', onClick: () => copy(jsonUrl, 'Daten-Link kopiert.') }, icon('link', 16), 'Daten-Link kopieren')));
-
   // ---------- Link verwalten ----------
   const renewBtn = h('button', { class: 'btn ghost small' }, icon('repeat', 16), 'Neuen Link erzeugen');
   renewBtn.addEventListener('click', () => create(renewBtn, true));
@@ -161,19 +150,15 @@ export async function widgetView() {
   const sec = (key, title, ic, summary, body, open = false) => fold({ group: 'widget', key, title, icon: ic, summary, body: h('section', { class: 'card' }, body), defaultOpen: open });
   const calSections = [
     sec('cal-ios', 'iPhone-Kalender', 'calendar', 'Ganzer Kalender, alle Ansichten', iphoneCal, ios),
-    sec('cal-android', 'Android-Kalender', 'calendar', 'Mit ICSx⁵', androidCal, !ios),
-  ];
-  const widgetSections = [
-    sec('w-ios', 'Widget am iPhone', 'home', 'Mit Scriptable', iphoneWidget),
-    sec('w-android', 'Widget am Android', 'home', 'Mit KWGT (optional)', androidWidget),
+    sec('cal-android', 'Android (Google Kalender)', 'calendar', 'Ohne Zusatz-App, aktualisiert verzögert', androidCal, !ios),
   ];
 
   root.append(...head,
     h('div', { class: 'section-title' }, 'Familienkalender im Handy'),
     ...(ios ? calSections : calSections.reverse()),
     sec('cal-link', 'Kalender-Link', 'link', 'Für andere Kalender-Apps', icsLink),
-    h('div', { class: 'section-title' }, 'Nächste Termine als Widget'),
-    ...(ios ? widgetSections : widgetSections.reverse()),
+    h('div', { class: 'section-title' }, 'Eigenes Widget fürs iPhone'),
+    sec('w-ios', 'Widget am iPhone', 'home', 'Nächste Termine und Monat, mit Scriptable', iphoneWidget),
     h('div', { class: 'section-title' }, 'Dein Link'),
     manage);
   return root;
